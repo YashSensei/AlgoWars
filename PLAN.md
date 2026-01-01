@@ -4,6 +4,12 @@
 
 AlgoWars is a real-time 1v1 competitive programming platform where users compete head-to-head solving algorithmic problems. The platform integrates with VJudge to fetch problems from Codeforces and submit solutions programmatically.
 
+**Design Principles:**
+- 🎯 **Lean & Clean**: Minimal code, maximum clarity
+- 🔌 **Extensible**: Easy to add game modes, features, integrations
+- ⚡ **Fast**: Bun runtime + efficient architecture
+- ✅ **Quality**: Automated checks before every commit
+
 ---
 
 ## 🎯 MVP Features (Blitz Mode)
@@ -24,233 +30,67 @@ AlgoWars is a real-time 1v1 competitive programming platform where users compete
 
 ## 🔧 Tech Stack
 
-| Component | Technology | Reason |
-|-----------|------------|--------|
-| Runtime | Node.js 20+ | Async-friendly, great ecosystem |
-| Language | TypeScript | Type safety, better DX |
-| Framework | Express.js | Simple, battle-tested |
-| Database | PostgreSQL | ACID compliance, reliable |
-| ORM | Prisma | Type-safe queries, migrations |
-| Real-time | Socket.IO | Bi-directional, room support |
-| Auth | JWT + bcrypt | Stateless, secure |
-| Queue | In-memory (MVP) → Redis (later) | Simple start, scalable |
-| VJudge | Custom HTTP client | Session-based auth |
+| Component | Technology | Why |
+|-----------|------------|-----|
+| Runtime | **Bun** | 3x faster than Node, native TS |
+| Language | TypeScript | Type safety |
+| Build | **tsup** | Zero-config, fast builds |
+| Framework | Hono | Lightweight, Bun-optimized |
+| Database | PostgreSQL | Reliable, extensible |
+| ORM | **Drizzle** | Lightweight, type-safe, Bun-native |
+| Real-time | Socket.IO | Rooms, reconnection |
+| Auth | JWT + Bun.password | Native, fast |
+| Linting | **Biome** | Fast, replaces ESLint+Prettier |
+| Git Hooks | **Husky + lint-staged** | Pre-commit quality |
 
 ---
 
 ## 🗄️ Database Schema
 
-```prisma
-model User {
-  id            String    @id @default(uuid())
-  username      String    @unique
-  email         String    @unique
-  passwordHash  String
-  rating        Int       @default(1000)
-  wins          Int       @default(0)
-  losses        Int       @default(0)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+Using Drizzle ORM with PostgreSQL. Schema defined in `src/db/schema.ts`.
 
-  matchesAsPlayer1  Match[]      @relation("Player1")
-  matchesAsPlayer2  Match[]      @relation("Player2")
-  submissions       Submission[]
-}
+### Tables
 
-model Problem {
-  id          String   @id @default(uuid())
-  ojName      String   // "CodeForces"
-  problemNum  String   // "1A"
-  title       String
-  difficulty  Int?     // Optional rating
-  cachedAt    DateTime @default(now())
+| Table | Description |
+|-------|-------------|
+| `users` | User accounts (id, username, email, passwordHash) |
+| `user_stats` | Rating & win/loss stats (1:1 with users) |
+| `problems` | Cached problems from Codeforces via VJudge |
+| `matches` | Match instances with status, timing, winner |
+| `match_players` | Junction table linking users to matches |
+| `submissions` | Code submissions with VJudge verdict |
 
-  matches     Match[]
+### Enums
 
-  @@unique([ojName, problemNum])
-}
-
-model Match {
-  id          String      @id @default(uuid())
-  player1Id   String
-  player2Id   String
-  problemId   String
-  winnerId    String?
-  status      MatchStatus @default(PENDING)
-  startedAt   DateTime?
-  endedAt     DateTime?
-  createdAt   DateTime    @default(now())
-
-  player1     User        @relation("Player1", fields: [player1Id], references: [id])
-  player2     User        @relation("Player2", fields: [player2Id], references: [id])
-  problem     Problem     @relation(fields: [problemId], references: [id])
-  submissions Submission[]
-}
-
-model Submission {
-  id           String           @id @default(uuid())
-  matchId      String
-  userId       String
-  vjudgeRunId  String?          // VJudge submission ID for polling
-  code         String           // Stored for reference
-  language     String           // e.g., "cpp17", "python3"
-  verdict      SubmissionVerdict @default(PENDING)
-  submittedAt  DateTime         @default(now())
-  judgedAt     DateTime?
-
-  match        Match            @relation(fields: [matchId], references: [id])
-  user         User             @relation(fields: [userId], references: [id])
-}
-
-enum MatchStatus {
-  PENDING      // Waiting for match to start
-  IN_PROGRESS  // Match is live
-  COMPLETED    // Someone won
-  ABORTED      // Timeout - no winner
-}
-
-enum SubmissionVerdict {
-  PENDING
-  ACCEPTED
-  WRONG_ANSWER
-  TIME_LIMIT
-  MEMORY_LIMIT
-  RUNTIME_ERROR
-  COMPILE_ERROR
-}
-```
+- `GameMode`: BLITZ (expandable to RAPID, CLASSIC, PRACTICE)
+- `MatchStatus`: WAITING, STARTING, ACTIVE, COMPLETED, ABORTED
+- `PlayerResult`: PENDING, WON, LOST, DRAW
+- `Verdict`: PENDING, JUDGING, ACCEPTED, WRONG_ANSWER, TIME_LIMIT, etc.
 
 ---
 
 ## 🌐 VJudge Integration
 
-### Authentication
-VJudge uses session-based auth. We'll maintain a service account:
+### Endpoints Used
 
+| Action | Method | Endpoint |
+|--------|--------|----------|
+| Login | POST | `/user/login` |
+| Get Problem | GET | `/problem/data` |
+| Submit | POST | `/problem/submit` |
+| Check Verdict | GET | `/solution/data/{runId}` |
+
+### Language Map (Codeforces)
+
+```typescript
+const LANGUAGES = {
+  cpp17: 54,
+  cpp20: 73,
+  python3: 31,
+  java17: 87,
+  pypy3: 70,
+} as const
 ```
-POST https://vjudge.net/user/login
-Content-Type: application/x-www-form-urlencoded
-
-username=<service_account>&password=<password>&captcha=
-```
-
-**Response**: `"success"` on valid credentials
-
-### Fetching Problems
-```
-GET https://vjudge.net/problem/data
-Params: OJId=CodeForces, probNum=1A, start=0, length=20
-```
-
-**Response**: Problem metadata including title, source, category
-
-### Submitting Solutions
-```
-POST https://vjudge.net/problem/submit
-Content-Type: application/x-www-form-urlencoded
-
-oj=CodeForces
-probNum=1A
-language=<language_id>
-source=<encoded_source_code>
-captcha=
-```
-
-**Response**: `{ "runId": 12345678 }` - Used for polling verdict
-
-### Polling Submission Status
-```
-GET https://vjudge.net/solution/data/<runId>
-```
-
-**Response**:
-```json
-{
-  "memory": 0,
-  "access": 1,
-  "statusType": 0,  // 0=Accepted, 1=WA, etc.
-  "runtime": 30,
-  "status": "Accepted",
-  "processing": false
-}
-```
-
-### Language IDs (Codeforces via VJudge)
-| Language | ID |
-|----------|-----|
-| GNU C++17 | 54 |
-| GNU C++20 | 73 |
-| Python 3 | 31 |
-| Java 17 | 87 |
-| PyPy 3 | 70 |
-
----
-
-## 📡 API Endpoints
-
-### Authentication
-```
-POST /api/auth/register
-Body: { username, email, password }
-Response: { user, token }
-
-POST /api/auth/login
-Body: { email, password }
-Response: { user, token }
-```
-
-### User
-```
-GET /api/users/me
-Headers: Authorization: Bearer <token>
-Response: { id, username, email, rating, wins, losses }
-
-GET /api/users/:id/stats
-Response: { rating, wins, losses, matchHistory }
-```
-
-### Matchmaking
-```
-POST /api/match/queue
-Headers: Authorization: Bearer <token>
-Response: { queued: true, position: 1 }
-→ WebSocket emits "match:found" when opponent found
-
-DELETE /api/match/queue
-Headers: Authorization: Bearer <token>
-Response: { queued: false }
-```
-
-### Match
-```
-GET /api/match/:id
-Response: { match details, problem (if started), submissions }
-
-POST /api/match/:id/submit
-Headers: Authorization: Bearer <token>
-Body: { code, language }
-Response: { submissionId, status: "pending" }
-```
-
----
-
-## 🔌 WebSocket Events
-
-### Client → Server
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `join:match` | `{ matchId }` | Join match room |
-| `leave:match` | `{ matchId }` | Leave match room |
-
-### Server → Client
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `match:found` | `{ matchId, opponentId, opponentUsername }` | Opponent found |
-| `match:starting` | `{ matchId, startsIn: 5 }` | Countdown to start |
-| `match:started` | `{ matchId, problem, endsAt }` | Match begins with problem |
-| `match:submission` | `{ matchId, userId, verdict }` | Submission verdict update |
-| `match:ended` | `{ matchId, winnerId, reason }` | Match concluded |
-| `opponent:submitted` | `{ matchId }` | Opponent made submission |
 
 ---
 
@@ -259,65 +99,88 @@ Response: { submissionId, status: "pending" }
 ```
 algowars/
 ├── src/
-│   ├── config/
-│   │   ├── database.ts      # Prisma client setup
-│   │   ├── env.ts           # Environment variables
-│   │   └── socket.ts        # Socket.IO setup
+│   ├── index.ts           # Entry point
+│   ├── app.ts             # Hono app setup
 │   │
-│   ├── controllers/
-│   │   ├── auth.controller.ts
-│   │   ├── user.controller.ts
-│   │   ├── match.controller.ts
-│   │   └── submission.controller.ts
-│   │
-│   ├── services/
-│   │   ├── auth.service.ts
-│   │   ├── user.service.ts
-│   │   ├── match.service.ts
-│   │   ├── matchmaking.service.ts
-│   │   ├── submission.service.ts
-│   │   └── vjudge.service.ts    # VJudge API integration
-│   │
-│   ├── middleware/
-│   │   ├── auth.middleware.ts   # JWT verification
-│   │   ├── error.middleware.ts  # Global error handler
-│   │   └── validate.middleware.ts
+│   ├── db/
+│   │   ├── schema.ts      # Drizzle schema (all tables)
+│   │   └── seed.ts        # Problem seeder
 │   │
 │   ├── routes/
-│   │   ├── auth.routes.ts
-│   │   ├── user.routes.ts
-│   │   ├── match.routes.ts
-│   │   └── index.ts
+│   │   ├── index.ts       # Route aggregator
+│   │   ├── auth.ts        # Register, login
+│   │   ├── users.ts       # User profiles
+│   │   └── matches.ts     # (pending)
+│   │
+│   ├── services/
+│   │   ├── auth.ts        # Auth logic, JWT
+│   │   ├── vjudge.ts      # VJudge API client
+│   │   ├── matchmaking.ts # (pending)
+│   │   └── match.ts       # (pending)
+│   │
+│   ├── middleware/
+│   │   └── auth.ts        # JWT verification
 │   │
 │   ├── socket/
-│   │   ├── handlers/
-│   │   │   ├── match.handler.ts
-│   │   │   └── connection.handler.ts
-│   │   └── index.ts
+│   │   └── index.ts       # WebSocket events
 │   │
-│   ├── utils/
-│   │   ├── jwt.ts
-│   │   ├── password.ts
-│   │   └── response.ts
+│   ├── lib/
+│   │   ├── db.ts          # Drizzle client
+│   │   ├── env.ts         # Typed env vars
+│   │   └── errors.ts      # Custom errors
 │   │
-│   ├── types/
-│   │   └── index.ts
-│   │
-│   └── app.ts               # Express app setup
-│   └── server.ts            # Entry point
+│   └── types.ts           # Shared types
 │
-├── prisma/
-│   ├── schema.prisma
-│   └── migrations/
-│
-├── tests/
-│   ├── unit/
-│   └── integration/
-│
-├── .env.example
-├── package.json
+├── drizzle/               # Migration files
+├── docker-compose.yml     # PostgreSQL
+├── .husky/pre-commit      # Quality gate
+├── biome.json
+├── drizzle.config.ts
+├── tsup.config.ts
 ├── tsconfig.json
-└── README.md
+├── package.json
+└── .env.example
+```
+
+---
+
+## 📡 API Endpoints
+
+### Auth
+```
+POST /auth/register    { username, email, password } → { user, token }
+POST /auth/login       { email, password } → { user, token }
+```
+
+### Users
+```
+GET  /users/me         → current user + stats (protected)
+GET  /users/:id        → public profile
+```
+
+### Matches (pending)
+```
+POST /matches/queue    → join matchmaking
+DELETE /matches/queue  → leave queue
+GET  /matches/:id      → match details
+POST /matches/:id/submit  { code, language }
+```
+
+---
+
+## 🔌 WebSocket Events
+
+```typescript
+// Client → Server
+socket.emit('match:join', { matchId })
+socket.emit('match:leave', { matchId })
+
+// Server → Client
+socket.on('queue:matched', { matchId, opponent })
+socket.on('match:countdown', { seconds: 5 })
+socket.on('match:start', { problem, endsAt })
+socket.on('match:submission', { userId, verdict })
+socket.on('match:end', { winnerId, reason })
 ```
 
 ---
@@ -325,67 +188,50 @@ algowars/
 ## 🚀 Implementation Phases
 
 ### Phase 1: Project Setup ✅
-- [x] Plan created
-- [ ] Initialize Node.js + TypeScript
-- [ ] Configure Express.js
-- [ ] Setup Prisma + PostgreSQL
-- [ ] Environment configuration
-- [ ] Basic project structure
+- [x] Init Bun project
+- [x] Configure tsup + TypeScript
+- [x] Setup Biome
+- [x] Setup Husky + lint-staged
+- [x] Create folder structure
 
-### Phase 2: Database & Models
-- [ ] Create Prisma schema
-- [ ] Run migrations
-- [ ] Seed sample problems
+### Phase 2: Database ✅
+- [x] Setup Drizzle + PostgreSQL (Docker)
+- [x] Create schema (6 tables)
+- [x] Run migrations
+- [x] Seed 20 Codeforces problems
 
-### Phase 3: Authentication
-- [ ] Register endpoint
-- [ ] Login endpoint
-- [ ] JWT middleware
-- [ ] Password hashing
+### Phase 3: Auth ✅
+- [x] Register endpoint (with user_stats creation)
+- [x] Login endpoint (returns user + stats + JWT)
+- [x] JWT middleware for protected routes
+- [x] Password hashing (Bun.password)
+- [x] GET /users/me and /users/:id
 
-### Phase 4: User Management
-- [ ] Get current user
-- [ ] Get user stats
-- [ ] Update profile (optional)
-
-### Phase 5: VJudge Integration
-- [ ] VJudge service class
-- [ ] Login/session management
+### Phase 4: VJudge Service ⬜
+- [ ] Session management (login, cookies)
 - [ ] Problem fetching
 - [ ] Solution submission
 - [ ] Verdict polling
 
-### Phase 6: Matchmaking
-- [ ] Queue data structure
-- [ ] Join queue endpoint
-- [ ] Leave queue endpoint
-- [ ] Matching algorithm
-- [ ] Problem selection
+### Phase 5: Matchmaking ⬜
+- [ ] Queue (in-memory)
+- [ ] Pairing logic (by rating ±100)
+- [ ] Problem selection (random from pool)
 
-### Phase 7: Match Engine
-- [ ] Create match
-- [ ] Match state machine
-- [ ] Timer management
-- [ ] Win/loss detection
-- [ ] Rating updates
+### Phase 6: Match Engine ⬜
+- [ ] State machine (WAITING → ACTIVE → COMPLETED)
+- [ ] Timer handling (10 min timeout)
+- [ ] Rating updates (+5/-5)
 
-### Phase 8: WebSocket Layer
+### Phase 7: WebSocket ⬜
 - [ ] Socket.IO setup
-- [ ] Authentication middleware
-- [ ] Match room management
-- [ ] Real-time events
+- [ ] Room management
+- [ ] Real-time event handlers
 
-### Phase 9: Submission Flow
-- [ ] Submit endpoint
-- [ ] VJudge submission
-- [ ] Verdict polling loop
-- [ ] Result broadcast
-
-### Phase 10: Polish & Testing
+### Phase 8: Integration ⬜
+- [ ] Submit flow end-to-end
 - [ ] Error handling
-- [ ] Input validation
-- [ ] Integration tests
-- [ ] Load testing
+- [ ] Testing
 
 ---
 
@@ -396,110 +242,58 @@ algowars/
 PORT=3000
 NODE_ENV=development
 
+# Database (Docker)
+DATABASE_URL=postgresql://algowars:algowars@localhost:5432/algowars
+
+# Auth
+JWT_SECRET=your-secret-key-min-16-chars
+
+# VJudge
+VJUDGE_USERNAME=your_username
+VJUDGE_PASSWORD=your_password
+```
+
+---
+
+## 🧪 Quick Commands
+
+```bash
+# Development
+bun run dev           # Start server with hot reload
+bun run build         # Build for production
+bun run start         # Run production build
+
+# Code Quality
+bun run lint          # Check code
+bun run lint:fix      # Auto-fix issues
+bun run typecheck     # Verify types
+
 # Database
-DATABASE_URL=postgresql://user:password@localhost:5432/algowars
-
-# JWT
-JWT_SECRET=your-super-secret-key
-JWT_EXPIRES_IN=7d
-
-# VJudge Service Account
-VJUDGE_USERNAME=your_vjudge_account
-VJUDGE_PASSWORD=your_vjudge_password
-
-# Optional: Redis (for production queue)
-REDIS_URL=redis://localhost:6379
+docker compose up -d  # Start PostgreSQL
+bun run db:generate   # Generate migrations
+bun run db:migrate    # Apply migrations
+bun run db:seed       # Seed problems
+bun run db:studio     # Visual DB browser
 ```
 
 ---
 
-## 🎲 Problem Selection Strategy
+## 📊 Future Extensions
 
-For MVP, we'll select problems from Codeforces with:
-- Rating: 800-1200 (beginner-friendly for 10 min limit)
-- Tags: implementation, math, greedy (solvable quickly)
-- Random selection from pre-cached pool
-
-```typescript
-// Example problem pool query
-const problems = await prisma.problem.findMany({
-  where: {
-    ojName: 'CodeForces',
-    difficulty: { gte: 800, lte: 1200 }
-  },
-  take: 100
-});
-
-const selectedProblem = problems[Math.floor(Math.random() * problems.length)];
-```
+| Feature | Schema Change | Code Change |
+|---------|--------------|-------------|
+| Rapid mode (3 problems) | Add `RAPID` to GameMode | New matching logic |
+| Teams | Add `team` field to MatchPlayer | Team queue |
+| Seasons | Add `season` to UserStats | Reset logic |
+| Practice mode | Add `PRACTICE` to GameMode | Skip rating |
+| Friends | New `Friendship` model | Friend routes |
+| Chat | New `Message` model | Socket events |
 
 ---
 
-## 📊 Match Flow Diagram
+## 🚦 Current Status
 
-```
-┌─────────────┐     ┌─────────────┐
-│   Player 1  │     │   Player 2  │
-└──────┬──────┘     └──────┬──────┘
-       │                   │
-       │ POST /match/queue │ POST /match/queue
-       ▼                   ▼
-┌──────────────────────────────────┐
-│         Matchmaking Queue        │
-│   (pairs players by rating ±100) │
-└──────────────────┬───────────────┘
-                   │
-                   ▼ Match Found!
-┌──────────────────────────────────┐
-│          Create Match            │
-│   - Select random problem        │
-│   - Set 10 min timer             │
-└──────────────────┬───────────────┘
-                   │
-    ┌──────────────┴──────────────┐
-    ▼                             ▼
-┌─────────┐                 ┌─────────┐
-│ WS emit │                 │ WS emit │
-│ match:  │                 │ match:  │
-│ found   │                 │ found   │
-└────┬────┘                 └────┬────┘
-     │                           │
-     ▼                           ▼
-┌─────────────────────────────────────────┐
-│              Match In Progress          │
-│  - Both see same problem                │
-│  - Monaco editor for coding             │
-│  - Submit goes to VJudge via backend    │
-│  - Verdicts polled and broadcast        │
-└────────────────────┬────────────────────┘
-                     │
-         ┌───────────┴───────────┐
-         ▼                       ▼
-┌─────────────────┐    ┌─────────────────┐
-│  First Accepted │    │    Timeout      │
-│  = Winner       │    │  = Both Lose    │
-└────────┬────────┘    └────────┬────────┘
-         │                      │
-         ▼                      ▼
-┌─────────────────────────────────────────┐
-│           Update Ratings                │
-│   Winner: +5  │  Loser: -5              │
-│   Timeout: Both -5                      │
-└─────────────────────────────────────────┘
-```
+**Completed:** Phases 1-3 (Project Setup, Database, Auth)
+**Next Up:** Phase 4 (VJudge Integration)
 
----
-
-## 🚦 Next Steps
-
-Ready to begin **Phase 1: Project Setup**?
-
-This will include:
-1. Initialize npm project with TypeScript
-2. Install dependencies (Express, Prisma, Socket.IO, etc.)
-3. Configure TypeScript and ESLint
-4. Setup basic Express server
-5. Configure Prisma with PostgreSQL
-6. Create folder structure
-
-Let me know when you're ready to proceed!
+Ready to build the VJudge service for submitting code and polling verdicts! 🚀
