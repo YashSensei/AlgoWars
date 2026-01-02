@@ -148,14 +148,14 @@ algowars/
 
 ### Auth
 ```
-POST /auth/register    { username, email, password } → { user, token }
-POST /auth/login       { email, password } → { user, token }
+POST /auth/register    { username, email, password } → { user + stats, token }
+POST /auth/login       { email, password } → { user + stats, token }
 ```
 
 ### Users
 ```
 GET  /users/me         → current user + stats (protected)
-GET  /users/:id        → public profile
+GET  /users/:username  → public profile + stats
 ```
 
 ### Matches (pending)

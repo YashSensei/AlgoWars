@@ -26,20 +26,29 @@ export const authService = {
     const passwordHash = await Bun.password.hash(password, { algorithm: "bcrypt" });
 
     // Create user + stats in transaction
-    const user = await db.transaction(async (tx) => {
+    const userId = await db.transaction(async (tx) => {
       const [newUser] = await tx
         .insert(users)
         .values({ username, email, passwordHash })
-        .returning({ id: users.id, username: users.username, email: users.email });
+        .returning({ id: users.id });
 
       if (!newUser) throw new Error("Failed to create user");
 
       await tx.insert(userStats).values({ userId: newUser.id });
 
-      return newUser;
+      return newUser.id;
     });
 
-    const token = this.signToken(user.id);
+    // Fetch user with stats (consistent with login response)
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { id: true, username: true, email: true, createdAt: true },
+      with: { stats: true },
+    });
+
+    if (!user) throw new Error("Failed to fetch created user");
+
+    const token = this.signToken(userId);
     return { user, token };
   },
 
