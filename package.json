@@ -12,6 +12,8 @@
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "check:functions": "bun scripts/check-function-length.ts",
+    "quality": "bun run typecheck && bun run lint && bun run check:functions && bun test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",

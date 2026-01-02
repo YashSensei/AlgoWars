@@ -12,10 +12,46 @@
     "rules": {
       "recommended": true,
       "complexity": {
-        "noForEach": "off"
+        "noForEach": "off",
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": {
+            "maxAllowedComplexity": 10
+          }
+        },
+        "noUselessFragments": "error",
+        "noUselessLoneBlockStatements": "error",
+        "noUselessTernary": "error",
+        "useFlatMap": "error",
+        "useOptionalChain": "error"
+      },
+      "correctness": {
+        "noUnusedImports": "error",
+        "noUnusedVariables": "error",
+        "noUnusedPrivateClassMembers": "error"
       },
       "suspicious": {
-        "noExplicitAny": "warn"
+        "noExplicitAny": "error",
+        "noEmptyBlockStatements": "error",
+        "noDebugger": "error",
+        "noConsole": "warn",
+        "noDoubleEquals": "error",
+        "noShadowRestrictedNames": "error"
+      },
+      "style": {
+        "useConst": "error",
+        "useTemplate": "error",
+        "noNonNullAssertion": "warn",
+        "useConsistentArrayType": "error",
+        "useExportType": "error",
+        "useImportType": "error",
+        "useForOf": "error",
+        "noUselessElse": "error",
+        "useArrayLiterals": "error"
+      },
+      "performance": {
+        "noAccumulatingSpread": "error",
+        "noDelete": "warn"
       }
     }
   },
