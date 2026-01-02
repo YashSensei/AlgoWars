@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  DATABASE_URL: postgresql://test:test@localhost:5432/test
+  JWT_SECRET: test-secret-key-for-ci-only
+  VJUDGE_USERNAME: test
+  VJUDGE_PASSWORD: test
+
 jobs:
   quality:
     name: Code Quality
@@ -26,8 +32,11 @@ jobs:
       - name: Type check
         run: bun run typecheck
 
-      - name: Lint
+      - name: Lint (Biome)
         run: bun run lint
+
+      - name: Check function complexity
+        run: bun run check:functions
 
       - name: Build
         run: bun run build
