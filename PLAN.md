@@ -299,10 +299,11 @@ socket.on('match:end', { winnerId, reason })
 - [x] Real-time event handlers (queue:matched, match:countdown, match:start, match:submission, match:end)
 - [x] Integration with matchmaking and match-engine services
 
-### Phase 8: Integration ⬜
-- [ ] Submit flow end-to-end
-- [ ] Error handling
-- [ ] Testing
+### Phase 8: Integration & Testing ✅
+- [x] Submit flow end-to-end (register → queue → match → submit → verdict)
+- [x] Edge case handling and input validation
+- [x] WebSocket test script (`test-socket.ts`)
+- [x] Full integration test script (`test-integration.ts`)
 
 ### Phase 9: Admin Panel ⬜
 - [ ] Add `role` column to users (USER, ADMIN)
@@ -418,8 +419,8 @@ bun scripts/fetch-statements.ts   # Fetch statements from Codeforces
 
 ## 🚦 Current Status
 
-**Completed:** Phases 1-7 (Project Setup, Database, Auth, AI Judge, Matchmaking, Match Engine, WebSocket)
-**In Progress:** Phase 8 (Integration & Testing)
+**Completed:** Phases 1-8 (Project Setup, Database, Auth, AI Judge, Matchmaking, Match Engine, WebSocket, Integration Testing)
+**In Progress:** None
 **Next:** Phase 9 (Admin Panel)
 
 ### Notes:
