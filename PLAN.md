@@ -79,9 +79,25 @@ AlgoWars owns problems → AI Judge evaluates code
 ```
 
 ### Problem Sourcing
-- Problems are **pre-scraped** from Codeforces (stored in `codeforces_scraped_problems/`)
-- Rating buckets: `0800-1199`, `1200-1399`, `1400-1599`
-- Problem statements are **lazy-fetched** on first use, then cached in DB
+
+**Two-Step Process:**
+
+1. **Ingest Metadata** (`bun scripts/ingest-problems.ts`)
+   - Load problem metadata from JSON files in `codeforces_scraped_problems/`
+   - Fields: contest_id, problem_index, name, rating, tags, url
+   - NO problem statement text (just links)
+
+2. **Fetch Statements** (`bun scripts/fetch-statements.ts`)
+   - Scrapes actual problem text from Codeforces HTML pages
+   - Extracts: statement, input/output specs, examples, notes
+   - Rate limited: 1 request per 2.5 seconds (Codeforces limit)
+   - Stores in `statement` column for AI judge
+
+**Rating Buckets:** `0800-1199`, `1200-1399`, `1400-1599`
+
+**Current Status:**
+- ~2900 problems metadata ingested
+- 100 problems with full statements (50 per bucket for 800-1399)
 - During matches, ALL problem data served from AlgoWars DB
 
 ### AI Judge (PoC)
@@ -286,6 +302,20 @@ socket.on('match:end', { winnerId, reason })
 - [ ] Error handling
 - [ ] Testing
 
+### Phase 9: Admin Panel ⬜
+- [ ] Add `role` column to users (USER, ADMIN)
+- [ ] Admin middleware (role check)
+- [ ] Problem management routes (bulk import, fetch statements)
+- [ ] User management routes (view, ban, rating adjust)
+- [ ] Match management routes (view, force-end)
+
+### Phase 10: MongoDB Integration ⬜
+- [ ] Setup MongoDB (Docker or Atlas)
+- [ ] Migrate match history to MongoDB (better for time-series)
+- [ ] Store submission code in MongoDB (large text)
+- [ ] Keep PostgreSQL for users, ratings, active matches
+- [ ] Hybrid approach: PG for relational, Mongo for documents
+
 ---
 
 ## 🔐 Environment Variables
@@ -324,8 +354,17 @@ bun run typecheck     # Verify types
 docker compose up -d  # Start PostgreSQL
 bun run db:generate   # Generate migrations
 bun run db:migrate    # Apply migrations
-bun run db:seed       # Seed problems
+bun run db:seed       # Seed problems (deprecated)
 bun run db:studio     # Visual DB browser
+
+# Problem Management
+bun scripts/ingest-problems.ts    # Load problem metadata from JSON
+bun scripts/fetch-statements.ts   # Scrape statements from Codeforces (~4 min)
+bun scripts/test-scraper.ts       # Test scraper on single problem
+
+# Testing
+bun scripts/test-api.ts           # Test all API endpoints
+bun scripts/test-matchmaking.ts   # Test matchmaking flow
 ```
 
 ---
@@ -343,14 +382,54 @@ bun run db:studio     # Visual DB browser
 
 ---
 
+## 🔧 Admin Panel (Planned)
+
+### Problem Management
+- **Bulk Import**: Upload JSON file with problem metadata → auto-fetch statements from Codeforces
+- **Manual Add**: Add individual problems with custom statements
+- **Fetch Statements**: Trigger statement fetch for problems missing them
+- **Problem Stats**: View problem usage, solve rates, etc.
+
+### User Management
+- View/search users
+- Rating adjustments (manual)
+- Ban/suspend accounts
+
+### Match Management
+- View active/completed matches
+- Force-end stuck matches
+- View match history with submissions
+
+### Implementation Plan
+```
+src/routes/admin.ts     # Admin-only routes (role check middleware)
+src/middleware/admin.ts # isAdmin check
+users table             # Add `role` column (USER, ADMIN)
+```
+
+### Scripts Available Now
+```bash
+bun scripts/ingest-problems.ts    # Load problems from JSON files
+bun scripts/fetch-statements.ts   # Fetch statements from Codeforces
+```
+
+---
+
 ## 🚦 Current Status
 
 **Completed:** Phases 1-6 (Project Setup, Database, Auth, AI Judge, Matchmaking, Match Engine)
+**In Progress:** Problem statement scraping (100 problems target)
 **Next:** Phase 7 (WebSocket)
 
-Notes:
+### Notes:
 - VJudge abandoned → AI judge (Claude via MegaLLM) as PoC
 - Matchmaking uses in-memory queue with rating-based pairing (±100)
 - Problem selection picks random problem from rating bucket
 - Match engine uses in-memory timers for 10-min timeout
 - First ACCEPTED submission wins the match
+
+### Problem Database:
+- ~2900 problem metadata ingested (from Codeforces JSON)
+- Statements scraped via HTML (Codeforces API doesn't provide them)
+- Rate limit: 1 req/2.5s to avoid Codeforces blocking
+- Target: 50 problems per bucket (0800-1199, 1200-1399)
