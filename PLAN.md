@@ -2,7 +2,9 @@
 
 ## Project Overview
 
-AlgoWars is a real-time 1v1 competitive programming platform where users compete head-to-head solving algorithmic problems. The platform integrates with VJudge to fetch problems from Codeforces and submit solutions programmatically.
+AlgoWars is a real-time 1v1 competitive programming platform where users compete head-to-head solving algorithmic problems. The platform uses an AI-powered judge (Claude via MegaLLM) to evaluate code submissions.
+
+> **Note:** VJudge integration was initially planned but abandoned because Codeforces captcha blocks bot account submissions. The AI judge is a PoC approach that can be swapped for a real judge (like Judge0 or custom sandbox) later.
 
 **Design Principles:**
 - 🎯 **Lean & Clean**: Minimal code, maximum clarity
@@ -55,10 +57,10 @@ Using Drizzle ORM with PostgreSQL. Schema defined in `src/db/schema.ts`.
 |-------|-------------|
 | `users` | User accounts (id, username, email, passwordHash) |
 | `user_stats` | Rating & win/loss stats (1:1 with users) |
-| `problems` | Cached problems from Codeforces via VJudge |
+| `problems` | Cached competitive programming problems |
 | `matches` | Match instances with status, timing, winner |
 | `match_players` | Junction table linking users to matches |
-| `submissions` | Code submissions with VJudge verdict |
+| `submissions` | Code submissions with AI judge verdicts |
 
 ### Enums
 
@@ -69,28 +71,61 @@ Using Drizzle ORM with PostgreSQL. Schema defined in `src/db/schema.ts`.
 
 ---
 
-## 🌐 VJudge Integration
+## 🌐 Problem & Judging Architecture
 
-### Endpoints Used
+### Key Principle
+```
+AlgoWars owns problems → AI Judge evaluates code
+```
 
-| Action | Method | Endpoint |
-|--------|--------|----------|
-| Login | POST | `/user/login` |
-| Get Problem | GET | `/problem/data` |
-| Submit | POST | `/problem/submit` |
-| Check Verdict | GET | `/solution/data/{runId}` |
+### Problem Sourcing
+- Problems are **pre-scraped** from Codeforces (stored in `codeforces_scraped_problems/`)
+- Rating buckets: `0800-1199`, `1200-1399`, `1400-1599`
+- Problem statements are **lazy-fetched** on first use, then cached in DB
+- During matches, ALL problem data served from AlgoWars DB
 
-### Language Map (Codeforces)
+### AI Judge (PoC)
+
+Uses Claude (via MegaLLM API) to analyze code correctness. The judge evaluates:
+- **Correctness**: Edge cases, boundary conditions, negative numbers, duplicates
+- **Time Complexity**: O(n!) to O(log n) based on input constraints
+- **Memory Usage**: Stack overflow, large allocations
+- **Runtime Safety**: Division by zero, null access, infinite loops
+- **Syntax**: Compilation errors, missing imports
+
+### Supported Languages
 
 ```typescript
-const LANGUAGES = {
-  cpp17: 54,
-  cpp20: 73,
-  python3: 31,
-  java17: 87,
-  pypy3: 70,
-} as const
+type Language = "cpp17" | "cpp20" | "python3" | "java17" | "pypy3"
 ```
+
+### Verdicts
+
+| Verdict | Description |
+|---------|-------------|
+| `ACCEPTED` | Correct for all cases, optimal complexity |
+| `WRONG_ANSWER` | Logic error, fails on some test cases |
+| `TIME_LIMIT` | Correct logic but O(n²) when O(n) needed |
+| `MEMORY_LIMIT` | Excessive memory usage (>256MB) |
+| `RUNTIME_ERROR` | Crashes (segfault, division by zero) |
+| `COMPILE_ERROR` | Syntax errors, missing imports |
+| `INVALID_CODE` | Empty or doesn't attempt to solve |
+
+### Submission Flow
+
+```
+1. User submits code
+2. Backend validates user is in active match
+3. Build problem statement from DB
+4. Code + problem → AI Judge
+5. AI returns verdict with confidence & feedback
+6. Store submission, update match state
+```
+
+### Rate Limiting (MVP)
+- 1 active submission at a time (in-memory lock)
+- Returns 429 if judge is busy
+- Prevents queue flooding
 
 ---
 
@@ -113,10 +148,11 @@ algowars/
 │   │   └── matches.ts     # (pending)
 │   │
 │   ├── services/
-│   │   ├── auth.ts        # Auth logic, JWT
-│   │   ├── vjudge.ts      # VJudge API client
-│   │   ├── matchmaking.ts # (pending)
-│   │   └── match.ts       # (pending)
+│   │   ├── auth.ts            # Auth logic, JWT
+│   │   ├── ai-judge.ts        # AI Judge (Claude via MegaLLM)
+│   │   ├── submission-queue.ts # Single submission lock
+│   │   ├── matchmaking.ts     # (pending)
+│   │   └── match.ts           # (pending)
 │   │
 │   ├── middleware/
 │   │   └── auth.ts        # JWT verification
@@ -207,11 +243,26 @@ socket.on('match:end', { winnerId, reason })
 - [x] Password hashing (Bun.password)
 - [x] GET /users/me and /users/:id
 
-### Phase 4: VJudge Service ⬜
-- [ ] Session management (login, cookies)
-- [ ] Problem fetching
-- [ ] Solution submission
-- [ ] Verdict polling
+### Phase 4: AI Judge Service ✅
+
+> **Note:** VJudge was originally planned but abandoned because Codeforces captcha blocks bot submissions. Pivoted to AI-powered judging as a PoC.
+
+#### 4.1 AI Judge (`src/services/ai-judge.ts`)
+- [x] Claude integration via MegaLLM OpenAI-compatible API
+- [x] Comprehensive prompt evaluating correctness, complexity, memory, runtime safety
+- [x] JSON response parsing with markdown stripping
+- [x] Verdict types: ACCEPTED, WRONG_ANSWER, TIME_LIMIT, MEMORY_LIMIT, RUNTIME_ERROR, COMPILE_ERROR, INVALID_CODE
+
+#### 4.2 Submission Queue (`src/services/submission-queue.ts`)
+- [x] In-memory lock (1 active submission at a time)
+- [x] Returns 429 "busy" if judge is processing
+- [x] Immediate verdict return (AI is fast)
+
+#### 4.3 API Endpoint (`src/routes/submissions.ts`)
+- [x] `POST /submissions` - validate match, build problem statement, call AI judge
+- [x] `GET /submissions/status` - check current submission status
+- [x] `GET /submissions/:id` - get submission details
+- [x] Map AI verdicts to DB enum
 
 ### Phase 5: Matchmaking ⬜
 - [ ] Queue (in-memory)
@@ -248,9 +299,8 @@ DATABASE_URL=postgresql://algowars:algowars@localhost:5432/algowars
 # Auth
 JWT_SECRET=your-secret-key-min-16-chars
 
-# VJudge
-VJUDGE_USERNAME=your_username
-VJUDGE_PASSWORD=your_password
+# AI Judge (MegaLLM)
+MEGALLM_API_KEY=your_megallm_api_key
 ```
 
 ---
@@ -293,7 +343,10 @@ bun run db:studio     # Visual DB browser
 
 ## 🚦 Current Status
 
-**Completed:** Phases 1-3 (Project Setup, Database, Auth)
-**Next Up:** Phase 4 (VJudge Integration)
+**Completed:** Phases 1-4 (Project Setup, Database, Auth, AI Judge)
+**Next:** Phase 5 (Matchmaking)
 
-Ready to build the VJudge service for submitting code and polling verdicts! 🚀
+AI Judge Notes:
+- VJudge was abandoned due to Codeforces captcha blocking bot submissions
+- Using Claude (via MegaLLM) for code evaluation as PoC
+- Can be swapped for real judge (Judge0, custom sandbox) in production
