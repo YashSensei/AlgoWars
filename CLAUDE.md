@@ -49,8 +49,8 @@ Uses `@/*` → `src/*` mapping (configured in tsconfig.json)
 `src/index.ts` → `src/app.ts` (Hono setup) → `src/routes/index.ts` (route aggregator)
 
 ### Key Directories
-- `src/routes/` - HTTP route handlers (auth, users, matches pending)
-- `src/services/` - Business logic (auth, ai-judge, submission-queue, matchmaking pending)
+- `src/routes/` - HTTP route handlers (auth, users, matches, submissions)
+- `src/services/` - Business logic (auth, ai-judge, submission-queue, matchmaking)
 - `src/middleware/` - Hono middleware (auth JWT verification)
 - `src/db/` - Drizzle schema and seed scripts
 - `src/lib/` - Utilities (db client, env validation, error classes)
@@ -87,4 +87,4 @@ Runs `bun run typecheck && bunx lint-staged` which applies Biome to staged `.ts`
 
 ## Current Status
 
-Phases 1-4 complete (project setup, database, auth, AI judge). VJudge integration was abandoned due to Codeforces captcha blocking bot accounts - using AI-powered judge (Claude via MegaLLM) instead. This is a PoC approach that can be swapped for a real judge later. See `PLAN.md` for detailed roadmap.
+Phases 1-5 complete (project setup, database, auth, AI judge, matchmaking). VJudge integration was abandoned due to Codeforces captcha blocking bot accounts - using AI-powered judge (Claude via MegaLLM) instead. See `PLAN.md` for detailed roadmap.

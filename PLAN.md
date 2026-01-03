@@ -264,10 +264,11 @@ socket.on('match:end', { winnerId, reason })
 - [x] `GET /submissions/:id` - get submission details
 - [x] Map AI verdicts to DB enum
 
-### Phase 5: Matchmaking ⬜
-- [ ] Queue (in-memory)
-- [ ] Pairing logic (by rating ±100)
-- [ ] Problem selection (random from pool)
+### Phase 5: Matchmaking ✅
+- [x] Queue (in-memory Map)
+- [x] Pairing logic (by rating ±100)
+- [x] Problem selection (random from rating bucket)
+- [x] Match routes (queue, leave, status, details, start)
 
 ### Phase 6: Match Engine ⬜
 - [ ] State machine (WAITING → ACTIVE → COMPLETED)
@@ -343,10 +344,10 @@ bun run db:studio     # Visual DB browser
 
 ## 🚦 Current Status
 
-**Completed:** Phases 1-4 (Project Setup, Database, Auth, AI Judge)
-**Next:** Phase 5 (Matchmaking)
+**Completed:** Phases 1-5 (Project Setup, Database, Auth, AI Judge, Matchmaking)
+**Next:** Phase 6 (Match Engine)
 
-AI Judge Notes:
-- VJudge was abandoned due to Codeforces captcha blocking bot submissions
-- Using Claude (via MegaLLM) for code evaluation as PoC
-- Can be swapped for real judge (Judge0, custom sandbox) in production
+Notes:
+- VJudge abandoned → AI judge (Claude via MegaLLM) as PoC
+- Matchmaking uses in-memory queue with rating-based pairing (±100)
+- Problem selection picks random problem from rating bucket
