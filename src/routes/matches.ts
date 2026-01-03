@@ -5,7 +5,7 @@
  * GET /matches/:id - Get match details
  */
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { matches, matchPlayers } from "../db/schema";
 import { db } from "../lib/db";
@@ -24,8 +24,20 @@ matchRoutes.use("*", authMiddleware);
  */
 matchRoutes.post("/queue", async (c) => {
   const user = c.get("user");
-  const result = await matchmaking.join(user.id);
-  return c.json(result, result.status === "matched" ? 201 : 200);
+
+  try {
+    const result = await matchmaking.join(user.id);
+
+    if (result.status === "already_in_match") {
+      return c.json(result, 200);
+    }
+    return c.json(result, result.status === "matched" ? 201 : 200);
+  } catch (err) {
+    if (err instanceof Error && err.message === "User stats not found") {
+      throw Errors.BadRequest("User profile incomplete");
+    }
+    throw err;
+  }
 });
 
 /**
@@ -45,6 +57,33 @@ matchRoutes.delete("/queue", async (c) => {
 matchRoutes.get("/queue/status", async (c) => {
   const user = c.get("user");
   return c.json({ queued: matchmaking.isQueued(user.id) });
+});
+
+/**
+ * GET /matches/active
+ * Get user's current active match (if any)
+ */
+matchRoutes.get("/active", async (c) => {
+  const user = c.get("user");
+
+  const player = await db.query.matchPlayers.findFirst({
+    where: eq(matchPlayers.userId, user.id),
+    with: {
+      match: {
+        with: {
+          problem: { columns: { id: true, title: true, difficulty: true } },
+          players: { with: { user: { columns: { id: true, username: true } } } },
+        },
+      },
+    },
+    orderBy: (mp, { desc }) => [desc(mp.joinedAt)],
+  });
+
+  if (!player || !["WAITING", "STARTING", "ACTIVE"].includes(player.match.status)) {
+    return c.json({ active: false });
+  }
+
+  return c.json({ active: true, match: player.match });
 });
 
 /**
@@ -77,13 +116,13 @@ matchRoutes.post("/:id/start", async (c) => {
   const { id } = c.req.param();
   const user = c.get("user");
 
-  // Verify user is in this match
+  // Verify user is in this match (query by BOTH matchId AND userId)
   const player = await db.query.matchPlayers.findFirst({
-    where: eq(matchPlayers.matchId, id),
+    where: and(eq(matchPlayers.matchId, id), eq(matchPlayers.userId, user.id)),
     with: { match: true },
   });
 
-  if (!player || player.userId !== user.id) {
+  if (!player) {
     throw Errors.Forbidden("You are not in this match");
   }
 
@@ -92,10 +131,8 @@ matchRoutes.post("/:id/start", async (c) => {
   }
 
   // Update to ACTIVE
-  await db
-    .update(matches)
-    .set({ status: "ACTIVE", startedAt: new Date() })
-    .where(eq(matches.id, id));
+  const now = new Date();
+  await db.update(matches).set({ status: "ACTIVE", startedAt: now }).where(eq(matches.id, id));
 
-  return c.json({ status: "ACTIVE", startedAt: new Date() });
+  return c.json({ status: "ACTIVE", startedAt: now });
 });

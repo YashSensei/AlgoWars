@@ -69,10 +69,33 @@ async function createMatch(p1: QueuedPlayer, p2: QueuedPlayer): Promise<string> 
   return matchId;
 }
 
+// Check if user has an active match
+async function hasActiveMatch(userId: string): Promise<string | null> {
+  const activePlayer = await db.query.matchPlayers.findFirst({
+    where: eq(matchPlayers.userId, userId),
+    with: { match: true },
+    orderBy: (mp, { desc }) => [desc(mp.joinedAt)],
+  });
+
+  if (activePlayer && ["WAITING", "STARTING", "ACTIVE"].includes(activePlayer.match.status)) {
+    return activePlayer.matchId;
+  }
+  return null;
+}
+
 // Public API
 export const matchmaking = {
-  // Join queue, returns matchId if paired immediately
-  async join(userId: string): Promise<{ status: "queued" | "matched"; matchId?: string }> {
+  // Join queue, returns matchId if paired immediately or already in match
+  async join(
+    userId: string,
+  ): Promise<{ status: "queued" | "matched" | "already_in_match"; matchId?: string }> {
+    // Check if already in an active match
+    const existingMatchId = await hasActiveMatch(userId);
+    if (existingMatchId) {
+      return { status: "already_in_match", matchId: existingMatchId };
+    }
+
+    // Check if already in queue
     if (queue.has(userId)) {
       return { status: "queued" };
     }
