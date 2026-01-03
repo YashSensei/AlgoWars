@@ -4,8 +4,9 @@
  */
 
 import { eq, sql } from "drizzle-orm";
-import { matches, matchPlayers, problems, userStats } from "../db/schema";
+import { matches, matchPlayers, problems, userStats, users } from "../db/schema";
 import { db } from "../lib/db";
+import { socketEmit } from "../socket";
 
 const RATING_RANGE = 100; // Match players within ±100 rating
 
@@ -70,6 +71,16 @@ async function createMatch(p1: QueuedPlayer, p2: QueuedPlayer): Promise<string> 
     { matchId, userId: p1.userId, ratingBefore: p1.rating },
     { matchId, userId: p2.userId, ratingBefore: p2.rating },
   ]);
+
+  // Fetch usernames for socket notifications
+  const [user1, user2] = await Promise.all([
+    db.query.users.findFirst({ where: eq(users.id, p1.userId), columns: { username: true } }),
+    db.query.users.findFirst({ where: eq(users.id, p2.userId), columns: { username: true } }),
+  ]);
+
+  // Notify both players via WebSocket
+  socketEmit.queueMatched(p1.userId, { matchId, opponentName: user2?.username ?? "Opponent" });
+  socketEmit.queueMatched(p2.userId, { matchId, opponentName: user1?.username ?? "Opponent" });
 
   return matchId;
 }

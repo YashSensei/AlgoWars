@@ -15,6 +15,7 @@ import { Errors } from "../lib/errors";
 import { authMiddleware } from "../middleware/auth";
 import { matchEngine } from "../services/match-engine";
 import { matchmaking } from "../services/matchmaking";
+import { socketEmit } from "../socket";
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -154,6 +155,16 @@ matchRoutes.post("/:id/start", async (c) => {
   // Start 10-minute match timer (duration is in seconds, timer needs ms)
   const durationMs = (player.match.duration ?? 600) * 1000;
   matchEngine.startTimer(id, durationMs);
+
+  // Fetch problem for socket emission
+  const matchWithProblem = await db.query.matches.findFirst({
+    where: eq(matches.id, id),
+    with: { problem: { columns: { id: true, title: true, statement: true, difficulty: true } } },
+  });
+
+  // Emit match start event to all players in the room
+  const endsAt = new Date(now.getTime() + durationMs).toISOString();
+  socketEmit.matchStart(id, { problem: matchWithProblem?.problem, endsAt });
 
   return c.json({ status: "ACTIVE", startedAt: now, endsAt: new Date(now.getTime() + durationMs) });
 });

@@ -6,6 +6,7 @@
 import { eq, sql } from "drizzle-orm";
 import { matches, matchPlayers, userStats } from "../db/schema";
 import { db } from "../lib/db";
+import { socketEmit } from "../socket";
 
 const RATING_CHANGE = 5; // Win: +5, Loss: -5
 
@@ -55,10 +56,17 @@ async function abortMatch(matchId: string): Promise<void> {
   for (const player of match.players) {
     await updatePlayerRating(player.userId, matchId, "DRAW", -RATING_CHANGE);
   }
+
+  // Emit match end event
+  socketEmit.matchEnd(matchId, { winnerId: null, reason: "timeout" });
 }
 
 // End match with winner
-async function endMatchWithWinner(matchId: string, winnerId: string): Promise<void> {
+async function endMatchWithWinner(
+  matchId: string,
+  winnerId: string,
+  reason = "solved",
+): Promise<void> {
   clearMatchTimer(matchId);
 
   const match = await db.query.matches.findFirst({
@@ -81,6 +89,9 @@ async function endMatchWithWinner(matchId: string, winnerId: string): Promise<vo
     const ratingDelta = isWinner ? RATING_CHANGE : -RATING_CHANGE;
     await updatePlayerRating(player.userId, matchId, result, ratingDelta);
   }
+
+  // Emit match end event
+  socketEmit.matchEnd(matchId, { winnerId, reason });
 }
 
 // Update player rating and match result
@@ -127,8 +138,11 @@ export async function processSubmissionVerdict(
   userId: string,
   verdict: string,
 ): Promise<{ ended: boolean; winnerId?: string }> {
+  // Broadcast submission result to match room
+  socketEmit.matchSubmission(matchId, { userId, verdict });
+
   if (verdict === "ACCEPTED") {
-    await endMatchWithWinner(matchId, userId);
+    await endMatchWithWinner(matchId, userId, "solved");
     return { ended: true, winnerId: userId };
   }
   return { ended: false };
@@ -151,7 +165,7 @@ export async function forfeitMatch(
   const opponent = match.players.find((p) => p.userId !== forfeitingUserId);
   if (!opponent) return { success: false, error: "Opponent not found" };
 
-  await endMatchWithWinner(matchId, opponent.userId);
+  await endMatchWithWinner(matchId, opponent.userId, "forfeit");
   return { success: true, winnerId: opponent.userId };
 }
 

@@ -292,10 +292,12 @@ socket.on('match:end', { winnerId, reason })
 - [x] Rating updates (+5 win, -5 loss, -5 each on abort)
 - [x] Win detection (first ACCEPTED verdict wins)
 
-### Phase 7: WebSocket ⬜
-- [ ] Socket.IO setup
-- [ ] Room management
-- [ ] Real-time event handlers
+### Phase 7: WebSocket ✅
+- [x] Socket.IO setup with Hono (getRequestListener pattern)
+- [x] JWT authentication middleware for socket connections
+- [x] Room management (user rooms, match rooms)
+- [x] Real-time event handlers (queue:matched, match:countdown, match:start, match:submission, match:end)
+- [x] Integration with matchmaking and match-engine services
 
 ### Phase 8: Integration ⬜
 - [ ] Submit flow end-to-end
@@ -416,9 +418,9 @@ bun scripts/fetch-statements.ts   # Fetch statements from Codeforces
 
 ## 🚦 Current Status
 
-**Completed:** Phases 1-6 (Project Setup, Database, Auth, AI Judge, Matchmaking, Match Engine)
-**In Progress:** Problem statement scraping (100 problems target)
-**Next:** Phase 7 (WebSocket)
+**Completed:** Phases 1-7 (Project Setup, Database, Auth, AI Judge, Matchmaking, Match Engine, WebSocket)
+**In Progress:** Phase 8 (Integration & Testing)
+**Next:** Phase 9 (Admin Panel)
 
 ### Notes:
 - VJudge abandoned → AI judge (Claude via MegaLLM) as PoC
@@ -426,9 +428,10 @@ bun scripts/fetch-statements.ts   # Fetch statements from Codeforces
 - Problem selection picks random problem from rating bucket
 - Match engine uses in-memory timers for 10-min timeout
 - First ACCEPTED submission wins the match
+- WebSocket uses Socket.IO with JWT auth, integrated with Hono via getRequestListener
 
 ### Problem Database:
 - ~2900 problem metadata ingested (from Codeforces JSON)
+- **98 problems with full statements** (52 in 800-1199, 46 in 1200-1399)
 - Statements scraped via HTML (Codeforces API doesn't provide them)
 - Rate limit: 1 req/2.5s to avoid Codeforces blocking
-- Target: 50 problems per bucket (0800-1199, 1200-1399)
