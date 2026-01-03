@@ -53,6 +53,11 @@ async function createMatch(p1: QueuedPlayer, p2: QueuedPlayer): Promise<string> 
   const avgRating = Math.round((p1.rating + p2.rating) / 2);
   const problemId = await selectProblem(avgRating);
 
+  // Ensure we have a problem before creating match
+  if (!problemId) {
+    throw new Error("No problems available for this rating bracket");
+  }
+
   const result = await db
     .insert(matches)
     .values({ problemId, status: "STARTING" })

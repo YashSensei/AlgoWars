@@ -16,10 +16,28 @@ import { authMiddleware } from "../middleware/auth";
 import { matchEngine } from "../services/match-engine";
 import { matchmaking } from "../services/matchmaking";
 
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isValidUUID = (id: string) => UUID_REGEX.test(id);
+
 export const matchRoutes = new Hono();
 
 // All routes require auth
 matchRoutes.use("*", authMiddleware);
+
+// Map matchmaking errors to user-friendly messages
+function handleMatchmakingError(err: unknown): never {
+  if (err instanceof Error) {
+    const errorMap: Record<string, string> = {
+      "User stats not found": "User profile incomplete",
+      "No problems available for this rating bracket":
+        "No problems available. Please try again later.",
+    };
+    const message = errorMap[err.message];
+    if (message) throw Errors.BadRequest(message);
+  }
+  throw err;
+}
 
 /**
  * POST /matches/queue
@@ -30,16 +48,10 @@ matchRoutes.post("/queue", async (c) => {
 
   try {
     const result = await matchmaking.join(user.id);
-
-    if (result.status === "already_in_match") {
-      return c.json(result, 200);
-    }
-    return c.json(result, result.status === "matched" ? 201 : 200);
+    const status = result.status === "matched" ? 201 : 200;
+    return c.json(result, status);
   } catch (err) {
-    if (err instanceof Error && err.message === "User stats not found") {
-      throw Errors.BadRequest("User profile incomplete");
-    }
-    throw err;
+    handleMatchmakingError(err);
   }
 });
 
@@ -95,6 +107,7 @@ matchRoutes.get("/active", async (c) => {
  */
 matchRoutes.get("/:id", async (c) => {
   const { id } = c.req.param();
+  if (!isValidUUID(id)) throw Errors.BadRequest("Invalid match ID");
 
   const match = await db.query.matches.findFirst({
     where: eq(matches.id, id),
@@ -117,6 +130,7 @@ matchRoutes.get("/:id", async (c) => {
  */
 matchRoutes.post("/:id/start", async (c) => {
   const { id } = c.req.param();
+  if (!isValidUUID(id)) throw Errors.BadRequest("Invalid match ID");
   const user = c.get("user");
 
   // Verify user is in this match (query by BOTH matchId AND userId)
@@ -150,6 +164,7 @@ matchRoutes.post("/:id/start", async (c) => {
  */
 matchRoutes.post("/:id/forfeit", async (c) => {
   const { id } = c.req.param();
+  if (!isValidUUID(id)) throw Errors.BadRequest("Invalid match ID");
   const user = c.get("user");
 
   // Verify user is in this match
