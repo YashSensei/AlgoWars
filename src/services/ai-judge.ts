@@ -107,10 +107,37 @@ function parseResponse(content: string): JudgeResult {
   const jsonStr = content.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
   const result = JSON.parse(jsonStr) as JudgeResult;
 
+  // Validate verdict
   if (!VALID_VERDICTS.includes(result.verdict)) {
     return { verdict: "WRONG_ANSWER", confidence: 50, feedback: "Invalid judge response" };
   }
+
+  // Validate confidence (clamp to 0-100)
+  if (typeof result.confidence !== "number" || Number.isNaN(result.confidence)) {
+    result.confidence = 50;
+  } else {
+    result.confidence = Math.max(0, Math.min(100, result.confidence));
+  }
+
   return result;
+}
+
+// Call AI API with timeout
+async function callAI(prompt: string, signal: AbortSignal): Promise<string | null> {
+  const response = await client.chat.completions.create(
+    { model: env.AI_MODEL, messages: [{ role: "user", content: prompt }], max_tokens: 500 },
+    { signal },
+  );
+  return response.choices[0]?.message?.content?.trim() ?? null;
+}
+
+// Handle errors and return appropriate result
+function handleError(err: unknown): JudgeResult {
+  if (err instanceof Error && err.name === "AbortError") {
+    return { verdict: "WRONG_ANSWER", confidence: 0, feedback: "Judge timeout" };
+  }
+  const message = err instanceof Error ? err.message : "Unknown error";
+  return { verdict: "WRONG_ANSWER", confidence: 0, feedback: `Judge error: ${message}` };
 }
 
 // Main judge function
@@ -119,27 +146,24 @@ export async function judgeCode(
   code: string,
   language: string,
 ): Promise<JudgeResult> {
-  try {
-    const response = await client.chat.completions.create({
-      model: "claude-sonnet-4-5-20250929",
-      messages: [{ role: "user", content: buildPrompt(problemStatement, code, language) }],
-      max_tokens: 500,
-    });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), env.AI_TIMEOUT_MS);
 
-    const content = response.choices[0]?.message?.content?.trim();
+  try {
+    const content = await callAI(buildPrompt(problemStatement, code, language), controller.signal);
     if (!content) {
       return { verdict: "WRONG_ANSWER", confidence: 0, feedback: "No response from judge" };
     }
-
     return parseResponse(content);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return { verdict: "WRONG_ANSWER", confidence: 0, feedback: `Judge error: ${message}` };
+    return handleError(err);
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
 // Quick validation without full judging (for syntax check)
-export async function quickValidate(code: string, language: string): Promise<boolean> {
+export function quickValidate(code: string, language: string): boolean {
   if (!code.trim()) return false;
   if (code.length < 10) return false;
 
