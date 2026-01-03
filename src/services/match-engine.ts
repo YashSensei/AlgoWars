@@ -134,11 +134,33 @@ export async function processSubmissionVerdict(
   return { ended: false };
 }
 
+// Forfeit match - forfeiting user loses, opponent wins
+export async function forfeitMatch(
+  matchId: string,
+  forfeitingUserId: string,
+): Promise<{ success: boolean; winnerId?: string; error?: string }> {
+  const match = await db.query.matches.findFirst({
+    where: eq(matches.id, matchId),
+    with: { players: true },
+  });
+
+  if (!match) return { success: false, error: "Match not found" };
+  if (match.status !== "ACTIVE") return { success: false, error: "Match is not active" };
+
+  // Find the opponent (the one who wins)
+  const opponent = match.players.find((p) => p.userId !== forfeitingUserId);
+  if (!opponent) return { success: false, error: "Opponent not found" };
+
+  await endMatchWithWinner(matchId, opponent.userId);
+  return { success: true, winnerId: opponent.userId };
+}
+
 // Public API
 export const matchEngine = {
   startTimer: startMatchTimer,
   clearTimer: clearMatchTimer,
   processVerdict: processSubmissionVerdict,
+  forfeit: forfeitMatch,
 
   // Get active timers count (for debugging)
   activeTimerCount: () => matchTimers.size,

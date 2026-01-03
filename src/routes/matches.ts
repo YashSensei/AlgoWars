@@ -3,6 +3,8 @@
  * POST /matches/queue - Join matchmaking queue
  * DELETE /matches/queue - Leave queue
  * GET /matches/:id - Get match details
+ * POST /matches/:id/start - Start match
+ * POST /matches/:id/forfeit - Forfeit match (opponent wins)
  */
 
 import { and, eq } from "drizzle-orm";
@@ -140,4 +142,30 @@ matchRoutes.post("/:id/start", async (c) => {
   matchEngine.startTimer(id, durationMs);
 
   return c.json({ status: "ACTIVE", startedAt: now, endsAt: new Date(now.getTime() + durationMs) });
+});
+
+/**
+ * POST /matches/:id/forfeit
+ * Forfeit the match (opponent wins automatically)
+ */
+matchRoutes.post("/:id/forfeit", async (c) => {
+  const { id } = c.req.param();
+  const user = c.get("user");
+
+  // Verify user is in this match
+  const player = await db.query.matchPlayers.findFirst({
+    where: and(eq(matchPlayers.matchId, id), eq(matchPlayers.userId, user.id)),
+  });
+
+  if (!player) {
+    throw Errors.Forbidden("You are not in this match");
+  }
+
+  const result = await matchEngine.forfeit(id, user.id);
+
+  if (!result.success) {
+    throw Errors.BadRequest(result.error ?? "Cannot forfeit match");
+  }
+
+  return c.json({ status: "forfeited", winnerId: result.winnerId });
 });
