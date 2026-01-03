@@ -354,13 +354,12 @@ bun run typecheck     # Verify types
 docker compose up -d  # Start PostgreSQL
 bun run db:generate   # Generate migrations
 bun run db:migrate    # Apply migrations
-bun run db:seed       # Seed problems (deprecated)
 bun run db:studio     # Visual DB browser
 
 # Problem Management
 bun scripts/ingest-problems.ts    # Load problem metadata from JSON
-bun scripts/fetch-statements.ts   # Scrape statements from Codeforces (~4 min)
-bun scripts/test-scraper.ts       # Test scraper on single problem
+bun scripts/fetch-statements.ts   # Bulk fetch 100 statements (~4 min)
+bun scripts/fetch-single.ts 1A    # Fetch single problem by ID
 
 # Testing
 bun scripts/test-api.ts           # Test all API endpoints

@@ -104,6 +104,8 @@ function extractText(html: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&")
     .replace(/&nbsp;/g, " ")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
     .replace(/&le;/g, "≤")
     .replace(/&ge;/g, "≥")
     .replace(/&ne;/g, "≠")
