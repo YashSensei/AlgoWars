@@ -3,7 +3,7 @@
  * In-memory queue with rating-based pairing
  */
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { matches, matchPlayers, problems, userStats, users } from "../db/schema";
 import { db } from "../lib/db";
 import { socketEmit } from "../socket";
@@ -37,13 +37,13 @@ function findMatch(player: QueuedPlayer): QueuedPlayer | null {
   return null;
 }
 
-// Select random problem from rating bucket
+// Select random problem from rating bucket (only problems with statements)
 async function selectProblem(avgRating: number): Promise<string | null> {
   const bucket = getRatingBucket(avgRating);
   const [problem] = await db
     .select({ id: problems.id })
     .from(problems)
-    .where(eq(problems.ratingBucket, bucket))
+    .where(and(eq(problems.ratingBucket, bucket), isNotNull(problems.statement)))
     .orderBy(sql`RANDOM()`)
     .limit(1);
   return problem?.id ?? null;

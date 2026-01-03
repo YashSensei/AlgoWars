@@ -142,7 +142,10 @@ export const matchPlayers = pgTable(
     ratingAfter: integer("rating_after"),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("match_user_idx").on(t.matchId, t.userId)],
+  (t) => [
+    uniqueIndex("match_user_idx").on(t.matchId, t.userId),
+    index("user_matches_idx").on(t.userId), // For finding user's matches
+  ],
 );
 
 // ============================================

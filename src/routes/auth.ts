@@ -17,9 +17,14 @@ const loginSchema = z.object({
 });
 
 authRoutes.post("/register", async (c) => {
-  const body = await c.req.json();
-  const parsed = registerSchema.safeParse(body);
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    throw Errors.BadRequest("Invalid JSON body");
+  }
 
+  const parsed = registerSchema.safeParse(body);
   if (!parsed.success) {
     throw Errors.BadRequest(parsed.error.issues[0]?.message ?? "Invalid input");
   }
@@ -31,9 +36,14 @@ authRoutes.post("/register", async (c) => {
 });
 
 authRoutes.post("/login", async (c) => {
-  const body = await c.req.json();
-  const parsed = loginSchema.safeParse(body);
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    throw Errors.BadRequest("Invalid JSON body");
+  }
 
+  const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {
     throw Errors.BadRequest(parsed.error.issues[0]?.message ?? "Invalid input");
   }

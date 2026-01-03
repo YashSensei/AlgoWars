@@ -51,15 +51,25 @@ class SubmissionQueue {
   }
 
   /**
+   * Atomically try to acquire the judging lock
+   * Returns true if lock acquired, false if busy
+   */
+  private tryAcquireLock(): boolean {
+    if (this.isJudging) return false;
+    this.isJudging = true;
+    return true;
+  }
+
+  /**
    * Submit code for AI judging
    * Returns verdict directly (AI judge is fast)
    */
   async submit(submission: QueuedSubmission): Promise<SubmissionStatus> {
-    if (this.isBusy()) {
+    // Atomic lock acquisition
+    if (!this.tryAcquireLock()) {
       return { status: "busy" };
     }
 
-    this.isJudging = true;
     this.currentSubmission = submission;
     const submissionId = `ai-${Date.now()}`;
 

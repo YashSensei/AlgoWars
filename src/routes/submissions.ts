@@ -5,6 +5,7 @@
  */
 
 import { and, eq } from "drizzle-orm";
+import type { Context } from "hono";
 import { Hono } from "hono";
 import { z } from "zod/v4";
 import { matches, matchPlayers, submissions } from "../db/schema";
@@ -16,6 +17,10 @@ import { type Language, submissionQueue } from "../services/submission-queue";
 
 export const submissionRoutes = new Hono();
 
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isValidUUID = (id: string) => UUID_REGEX.test(id);
+
 // All routes require auth
 submissionRoutes.use("*", authMiddleware);
 
@@ -25,51 +30,56 @@ const submitSchema = z.object({
   language: z.enum(["cpp17", "cpp20", "python3", "java17", "pypy3"] as const),
 });
 
-/**
- * POST /submissions
- * Submit code for judging in a match (uses AI judge)
- */
-submissionRoutes.post("/", async (c) => {
-  const user = c.get("user");
-  const body = await c.req.json();
-  const parsed = submitSchema.safeParse(body);
+// Helper: Parse and validate request body
+async function parseSubmitBody(c: Context) {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    throw Errors.BadRequest("Invalid JSON body");
+  }
 
+  const parsed = submitSchema.safeParse(body);
   if (!parsed.success) {
     throw Errors.BadRequest(parsed.error.issues[0]?.message ?? "Invalid input");
   }
+  return parsed.data;
+}
 
-  const { matchId, code, language } = parsed.data;
-
-  // Verify match exists and is active
+// Helper: Validate match and player, return match with problem (non-null)
+async function validateMatchAndPlayer(matchId: string, userId: string) {
   const match = await db.query.matches.findFirst({
     where: eq(matches.id, matchId),
     with: { problem: true },
   });
 
   if (!match) throw Errors.NotFound("Match");
-  if (match.status !== "ACTIVE") {
-    throw Errors.BadRequest("Match is not active");
-  }
-  if (!match.problem) {
-    throw Errors.BadRequest("Match has no assigned problem");
-  }
+  if (match.status !== "ACTIVE") throw Errors.BadRequest("Match is not active");
+  if (!match.problem) throw Errors.BadRequest("Match has no assigned problem");
 
-  // Verify user is a player in this match
   const player = await db.query.matchPlayers.findFirst({
-    where: and(eq(matchPlayers.matchId, matchId), eq(matchPlayers.userId, user.id)),
+    where: and(eq(matchPlayers.matchId, matchId), eq(matchPlayers.userId, userId)),
   });
 
-  if (!player) {
-    throw Errors.Forbidden("You are not a player in this match");
-  }
+  if (!player) throw Errors.Forbidden("You are not a player in this match");
 
-  // Build problem statement for AI judge
-  const problemStatement = buildProblemStatement(match.problem);
+  // Return with problem guaranteed non-null
+  return { ...match, problem: match.problem };
+}
 
-  // Submit to AI judge queue
+/**
+ * POST /submissions
+ * Submit code for judging in a match (uses AI judge)
+ */
+submissionRoutes.post("/", async (c) => {
+  const user = c.get("user");
+  const { matchId, code, language } = await parseSubmitBody(c);
+  const { problem } = await validateMatchAndPlayer(matchId, user.id);
+
+  const problemStatement = buildProblemStatement(problem);
   const queueResult = await submissionQueue.submit({
     userId: user.id,
-    problemId: match.problem.id,
+    problemId: problem.id,
     problemStatement,
     code,
     language: language as Language,
@@ -78,16 +88,9 @@ submissionRoutes.post("/", async (c) => {
   if (queueResult.status === "busy") {
     return c.json({ status: "busy", message: "Judge is processing another submission" }, 429);
   }
+  if (queueResult.error) throw Errors.BadRequest(queueResult.error);
 
-  if (queueResult.error) {
-    throw Errors.BadRequest(queueResult.error);
-  }
-
-  // Determine verdict for DB (AI judge returns immediately)
   const verdictStr = queueResult.verdict?.verdict ?? "PENDING";
-  const dbVerdict = mapVerdictToEnum(verdictStr);
-
-  // Store submission in database
   const [submission] = await db
     .insert(submissions)
     .values({
@@ -96,12 +99,11 @@ submissionRoutes.post("/", async (c) => {
       code,
       language,
       vjudgeRunId: queueResult.submissionId,
-      verdict: dbVerdict,
+      verdict: mapVerdictToEnum(verdictStr),
       judgedAt: queueResult.verdict?.isFinal ? new Date() : undefined,
     })
     .returning({ id: submissions.id });
 
-  // Check if ACCEPTED → end match with winner
   const matchResult = await matchEngine.processVerdict(matchId, user.id, verdictStr);
 
   return c.json(
@@ -133,6 +135,7 @@ submissionRoutes.get("/status", async (c) => {
  */
 submissionRoutes.get("/:id", async (c) => {
   const { id } = c.req.param();
+  if (!isValidUUID(id)) throw Errors.BadRequest("Invalid submission ID");
 
   const submission = await db.query.submissions.findFirst({
     where: eq(submissions.id, id),
