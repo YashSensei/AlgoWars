@@ -270,10 +270,11 @@ socket.on('match:end', { winnerId, reason })
 - [x] Problem selection (random from rating bucket)
 - [x] Match routes (queue, leave, status, details, start)
 
-### Phase 6: Match Engine ⬜
-- [ ] State machine (WAITING → ACTIVE → COMPLETED)
-- [ ] Timer handling (10 min timeout)
-- [ ] Rating updates (+5/-5)
+### Phase 6: Match Engine ✅
+- [x] State machine (STARTING → ACTIVE → COMPLETED/ABORTED)
+- [x] Timer handling (10 min timeout with auto-abort)
+- [x] Rating updates (+5 win, -5 loss, -5 each on abort)
+- [x] Win detection (first ACCEPTED verdict wins)
 
 ### Phase 7: WebSocket ⬜
 - [ ] Socket.IO setup
@@ -344,10 +345,12 @@ bun run db:studio     # Visual DB browser
 
 ## 🚦 Current Status
 
-**Completed:** Phases 1-5 (Project Setup, Database, Auth, AI Judge, Matchmaking)
-**Next:** Phase 6 (Match Engine)
+**Completed:** Phases 1-6 (Project Setup, Database, Auth, AI Judge, Matchmaking, Match Engine)
+**Next:** Phase 7 (WebSocket)
 
 Notes:
 - VJudge abandoned → AI judge (Claude via MegaLLM) as PoC
 - Matchmaking uses in-memory queue with rating-based pairing (±100)
 - Problem selection picks random problem from rating bucket
+- Match engine uses in-memory timers for 10-min timeout
+- First ACCEPTED submission wins the match
