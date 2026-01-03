@@ -11,6 +11,7 @@ import { matches, matchPlayers } from "../db/schema";
 import { db } from "../lib/db";
 import { Errors } from "../lib/errors";
 import { authMiddleware } from "../middleware/auth";
+import { matchEngine } from "../services/match-engine";
 import { matchmaking } from "../services/matchmaking";
 
 export const matchRoutes = new Hono();
@@ -130,9 +131,13 @@ matchRoutes.post("/:id/start", async (c) => {
     throw Errors.BadRequest("Match is not in STARTING state");
   }
 
-  // Update to ACTIVE
+  // Update to ACTIVE and start timer
   const now = new Date();
   await db.update(matches).set({ status: "ACTIVE", startedAt: now }).where(eq(matches.id, id));
 
-  return c.json({ status: "ACTIVE", startedAt: now });
+  // Start 10-minute match timer (duration is in seconds, timer needs ms)
+  const durationMs = (player.match.duration ?? 600) * 1000;
+  matchEngine.startTimer(id, durationMs);
+
+  return c.json({ status: "ACTIVE", startedAt: now, endsAt: new Date(now.getTime() + durationMs) });
 });

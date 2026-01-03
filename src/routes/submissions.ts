@@ -11,6 +11,7 @@ import { matches, matchPlayers, submissions } from "../db/schema";
 import { db } from "../lib/db";
 import { Errors } from "../lib/errors";
 import { authMiddleware } from "../middleware/auth";
+import { matchEngine } from "../services/match-engine";
 import { type Language, submissionQueue } from "../services/submission-queue";
 
 export const submissionRoutes = new Hono();
@@ -100,6 +101,9 @@ submissionRoutes.post("/", async (c) => {
     })
     .returning({ id: submissions.id });
 
+  // Check if ACCEPTED → end match with winner
+  const matchResult = await matchEngine.processVerdict(matchId, user.id, verdictStr);
+
   return c.json(
     {
       status: "complete",
@@ -107,6 +111,8 @@ submissionRoutes.post("/", async (c) => {
       verdict: queueResult.verdict?.verdict,
       feedback: queueResult.verdict?.feedback,
       confidence: queueResult.verdict?.confidence,
+      matchEnded: matchResult.ended,
+      winnerId: matchResult.winnerId,
     },
     201,
   );
