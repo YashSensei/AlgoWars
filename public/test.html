@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AlgoWars Test</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 20px; }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 { text-align: center; margin-bottom: 20px; color: #38bdf8; }
+    .status-bar { background: #1e293b; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 20px; align-items: center; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .status-dot.connected { background: #22c55e; }
+    .status-dot.disconnected { background: #ef4444; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .card { background: #1e293b; border-radius: 12px; padding: 20px; }
+    .card h2 { color: #38bdf8; margin-bottom: 15px; font-size: 1.1rem; }
+    input, textarea, select { width: 100%; padding: 10px; border: 1px solid #334155; border-radius: 6px; background: #0f172a; color: #e2e8f0; margin-bottom: 10px; }
+    textarea { height: 150px; font-family: monospace; resize: vertical; }
+    button { padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-success { background: #22c55e; color: white; }
+    .btn-success:hover { background: #16a34a; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .log { background: #0f172a; border-radius: 6px; padding: 10px; height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; }
+    .log-entry { padding: 4px 0; border-bottom: 1px solid #1e293b; }
+    .log-entry.success { color: #22c55e; }
+    .log-entry.error { color: #ef4444; }
+    .log-entry.info { color: #38bdf8; }
+    .log-entry.event { color: #a78bfa; }
+    .problem-box { background: #0f172a; border-radius: 6px; padding: 15px; margin-bottom: 15px; max-height: 300px; overflow-y: auto; }
+    .problem-box h3 { color: #fbbf24; margin-bottom: 10px; }
+    .hidden { display: none; }
+    .match-info { background: #0f172a; padding: 10px; border-radius: 6px; margin-bottom: 10px; }
+    .verdict { padding: 8px 12px; border-radius: 6px; font-weight: bold; display: inline-block; margin-top: 10px; }
+    .verdict.ACCEPTED { background: #22c55e; color: white; }
+    .verdict.WRONG_ANSWER { background: #ef4444; color: white; }
+    .verdict.TIME_LIMIT { background: #f59e0b; color: white; }
+    .verdict.MEMORY_LIMIT { background: #8b5cf6; color: white; }
+    .verdict.RUNTIME_ERROR { background: #ec4899; color: white; }
+    .verdict.COMPILE_ERROR { background: #6366f1; color: white; }
+    .verdict.INVALID_CODE { background: #6b7280; color: white; }
+    .verdict.PENDING { background: #6b7280; color: white; }
+    .full-width { grid-column: 1 / -1; }
+    .countdown { font-size: 2rem; color: #fbbf24; text-align: center; padding: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AlgoWars Test Arena</h1>
+
+    <div class="status-bar">
+      <div><span class="status-dot disconnected" id="socketStatus"></span> WebSocket</div>
+      <div id="userInfo">Not logged in</div>
+      <div id="matchStatus">No active match</div>
+    </div>
+
+    <div class="grid">
+      <!-- Auth Section -->
+      <div class="card" id="authCard">
+        <h2>1. Authentication</h2>
+        <input type="text" id="username" placeholder="Username (min 3 chars)">
+        <input type="email" id="email" placeholder="Email">
+        <input type="password" id="password" placeholder="Password (min 6 chars)" value="test123">
+        <div style="display: flex; gap: 10px;">
+          <button class="btn-primary" onclick="register()">Register</button>
+          <button class="btn-success" onclick="login()">Login</button>
+        </div>
+      </div>
+
+      <!-- Queue Section -->
+      <div class="card" id="queueCard">
+        <h2>2. Matchmaking</h2>
+        <p style="margin-bottom: 15px; color: #94a3b8;">Join the queue to find an opponent</p>
+        <button class="btn-primary" id="queueBtn" onclick="joinQueue()" disabled>Join Queue</button>
+        <button class="btn-danger" id="leaveBtn" onclick="leaveQueue()" disabled>Leave Queue</button>
+        <div class="match-info hidden" id="matchInfo">
+          <strong>Match ID:</strong> <span id="matchId"></span><br>
+          <strong>Opponent:</strong> <span id="opponent"></span>
+        </div>
+      </div>
+
+      <!-- Problem Section -->
+      <div class="card full-width hidden" id="problemCard">
+        <h2>3. Problem</h2>
+        <div class="problem-box">
+          <h3 id="problemTitle">Loading...</h3>
+          <div id="problemStatement"></div>
+        </div>
+        <div class="countdown hidden" id="startCountdown">Match starts in <span id="countdownNum">3</span>...</div>
+      </div>
+
+      <!-- Submit Section -->
+      <div class="card full-width hidden" id="submitCard">
+        <h2>4. Submit Solution</h2>
+        <select id="language">
+          <option value="python3">Python 3</option>
+          <option value="cpp17">C++ 17</option>
+          <option value="cpp20">C++ 20</option>
+          <option value="java17">Java 17</option>
+          <option value="pypy3">PyPy 3</option>
+        </select>
+        <textarea id="code" placeholder="Write your code here...">n, m, a = map(int, input().split())
+import math
+print(math.ceil(n/a) * math.ceil(m/a))</textarea>
+        <div style="display: flex; gap: 10px; margin-top: 10px;">
+          <button class="btn-success" id="submitBtn" onclick="submitCode()">Submit Code</button>
+          <button class="btn-danger" id="forfeitBtn" onclick="forfeitMatch()" disabled>Forfeit (available in <span id="forfeitTimer">5:00</span>)</button>
+        </div>
+        <div id="verdictBox"></div>
+        <div id="disconnectWarning" class="hidden" style="background: #fbbf24; color: #0f172a; padding: 10px; border-radius: 6px; margin-top: 10px; font-weight: bold;">
+          ⚠️ Opponent disconnected! They have <span id="disconnectTimer">10</span>s to reconnect...
+        </div>
+      </div>
+
+      <!-- Event Log -->
+      <div class="card full-width">
+        <h2>Event Log</h2>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = 'http://localhost:3000';
+    const FORFEIT_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+    let token = null;
+    let socket = null;
+    let currentMatchId = null;
+    let currentOpponentId = null;
+    let currentUser = null;
+    let matchStartTime = null;
+    let forfeitTimerInterval = null;
+
+    // Logging
+    function log(msg, type = 'info') {
+      const logEl = document.getElementById('log');
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // API helper
+    async function api(method, path, body = null) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${API}${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : null
+      });
+
+      const data = await res.json().catch(() => null);
+      return { status: res.status, data };
+    }
+
+    // Better error messages
+    function formatError(error) {
+      if (!error) return 'Unknown error';
+      if (error.includes('>=6 characters')) return 'Password must be at least 6 characters';
+      if (error.includes('>=3 characters')) return 'Username must be at least 3 characters';
+      if (error.includes('Invalid email')) return 'Please enter a valid email address';
+      return error;
+    }
+
+    // Auth
+    async function register() {
+      const username = document.getElementById('username').value || `player_${Date.now()}`;
+      const email = document.getElementById('email').value || `${username}@test.com`;
+      const password = document.getElementById('password').value;
+
+      log(`Registering as ${username}...`);
+      const { status, data } = await api('POST', '/auth/register', { username, email, password });
+
+      if (status === 201) {
+        token = data.token;
+        currentUser = data.user;
+        log(`Registered! Rating: ${data.user.stats.rating}`, 'success');
+        document.getElementById('userInfo').textContent = `${username} (${data.user.stats.rating})`;
+        connectSocket();
+        enableQueue();
+        checkForActiveMatch();
+      } else {
+        log(`Register failed: ${formatError(data?.error)}`, 'error');
+      }
+    }
+
+    async function login() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+
+      log(`Logging in...`);
+      const { status, data } = await api('POST', '/auth/login', { email, password });
+
+      if (status === 200) {
+        token = data.token;
+        currentUser = data.user;
+        log(`Logged in! Rating: ${data.user.stats.rating}`, 'success');
+        document.getElementById('userInfo').textContent = `${data.user.username} (${data.user.stats.rating})`;
+        connectSocket();
+        enableQueue();
+        checkForActiveMatch();
+      } else {
+        log(`Login failed: ${formatError(data?.error)}`, 'error');
+      }
+    }
+
+    // Check for active match on login (auto-redirect)
+    async function checkForActiveMatch() {
+      const { data } = await api('GET', '/matches/active');
+      if (data?.active && data.match?.id) {
+        log(`Rejoining active match: ${data.match.id}`, 'event');
+        currentMatchId = data.match.id;
+        await loadMatchAndShow(data.match.id);
+      }
+    }
+
+    // Load existing match
+    async function loadMatchAndShow(matchId) {
+      const { data: match } = await api('GET', `/matches/${matchId}`);
+      if (!match) return;
+
+      // Find opponent
+      const opponent = match.players?.find(p => p.user?.id !== currentUser.id);
+      currentOpponentId = opponent?.user?.id;
+
+      document.getElementById('matchId').textContent = matchId.slice(0, 8) + '...';
+      document.getElementById('opponent').textContent = opponent?.user?.username || 'Opponent';
+      document.getElementById('matchInfo').classList.remove('hidden');
+      document.getElementById('queueBtn').disabled = true;
+      document.getElementById('leaveBtn').disabled = true;
+
+      if (match.problem) {
+        document.getElementById('problemTitle').textContent = match.problem.title;
+        document.getElementById('problemStatement').innerHTML = match.problem.statement || 'No statement available';
+        document.getElementById('problemCard').classList.remove('hidden');
+      }
+
+      // Join socket room
+      socket?.emit('match:join', { matchId, opponentId: currentOpponentId });
+
+      // If match is active, show submit section
+      if (match.status === 'ACTIVE') {
+        document.getElementById('matchStatus').textContent = 'Match Active!';
+        document.getElementById('submitCard').classList.remove('hidden');
+        matchStartTime = new Date(match.startedAt).getTime();
+        startForfeitTimer();
+      } else if (match.status === 'STARTING') {
+        document.getElementById('matchStatus').textContent = 'Match Starting...';
+        autoStartMatch();
+      }
+    }
+
+    // WebSocket
+    function connectSocket() {
+      socket = io(API, { auth: { token }, transports: ['websocket'] });
+
+      socket.on('connect', () => {
+        log('WebSocket connected!', 'success');
+        document.getElementById('socketStatus').className = 'status-dot connected';
+        // Rejoin match room if we have an active match (handles reconnection)
+        if (currentMatchId) {
+          socket.emit('match:join', { matchId: currentMatchId, opponentId: currentOpponentId });
+          log('Rejoined match room after reconnect', 'info');
+        }
+      });
+
+      socket.on('disconnect', () => {
+        log('WebSocket disconnected', 'error');
+        document.getElementById('socketStatus').className = 'status-dot disconnected';
+      });
+
+      socket.on('queue:matched', (data) => {
+        log(`MATCHED! Match ID: ${data.matchId}`, 'event');
+        currentMatchId = data.matchId;
+        currentOpponentId = data.opponent?.id;
+        document.getElementById('matchStatus').textContent = 'Matched!';
+        showMatchInfo(data);
+        socket.emit('match:join', { matchId: data.matchId, opponentId: data.opponent?.id });
+      });
+
+      socket.on('match:start', (data) => {
+        log('Match started!', 'success');
+        document.getElementById('matchStatus').textContent = 'Match Active!';
+        document.getElementById('submitCard').classList.remove('hidden');
+        document.getElementById('startCountdown').classList.add('hidden');
+        // Only start timer if not already started
+        if (!matchStartTime) {
+          matchStartTime = Date.now();
+          startForfeitTimer();
+        }
+      });
+
+      socket.on('match:submission', (data) => {
+        log(`Submission from ${data.userId === currentUser.id ? 'you' : 'opponent'}: ${data.verdict}`, 'event');
+      });
+
+      socket.on('match:end', (data) => {
+        const won = data.winnerId === currentUser.id;
+        log(`Match ended! ${won ? 'YOU WON!' : 'You lost.'} (${data.reason})`, won ? 'success' : 'error');
+        document.getElementById('matchStatus').textContent = won ? 'Victory!' : 'Defeat';
+        document.getElementById('disconnectWarning').classList.add('hidden');
+        clearForfeitTimer();
+        // Reset UI for new match after 3 seconds
+        setTimeout(resetForNewMatch, 3000);
+      });
+
+      // Opponent disconnect warning
+      socket.on('opponent:disconnected', (data) => {
+        log(`⚠️ Opponent disconnected! ${data.timeout}s to reconnect...`, 'error');
+        document.getElementById('disconnectWarning').classList.remove('hidden');
+        startDisconnectCountdown(data.timeout);
+      });
+
+      socket.on('opponent:reconnected', () => {
+        log('✅ Opponent reconnected!', 'success');
+        document.getElementById('disconnectWarning').classList.add('hidden');
+        clearDisconnectCountdown();
+      });
+    }
+
+    // Reset UI for new match
+    function resetForNewMatch() {
+      currentMatchId = null;
+      currentOpponentId = null;
+      matchStartTime = null;
+      document.getElementById('matchStatus').textContent = 'No active match';
+      document.getElementById('matchInfo').classList.add('hidden');
+      document.getElementById('problemCard').classList.add('hidden');
+      document.getElementById('submitCard').classList.add('hidden');
+      document.getElementById('startCountdown').classList.add('hidden');
+      document.getElementById('queueBtn').disabled = false;
+      document.getElementById('leaveBtn').disabled = true;
+      document.getElementById('forfeitBtn').disabled = true;
+      document.getElementById('verdictBox').innerHTML = '';
+      log('Ready for new match!', 'info');
+    }
+
+    // Forfeit timer (5 minutes before can forfeit)
+    function startForfeitTimer() {
+      clearForfeitTimer();
+      const btn = document.getElementById('forfeitBtn');
+      const timerSpan = document.getElementById('forfeitTimer');
+      btn.disabled = true;
+
+      forfeitTimerInterval = setInterval(() => {
+        const elapsed = Date.now() - matchStartTime;
+        const remaining = FORFEIT_DELAY_MS - elapsed;
+
+        if (remaining <= 0) {
+          btn.disabled = false;
+          btn.textContent = 'Forfeit Match';
+          clearForfeitTimer();
+        } else {
+          const mins = Math.floor(remaining / 60000);
+          const secs = Math.floor((remaining % 60000) / 1000);
+          timerSpan.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+      }, 1000);
+    }
+
+    function clearForfeitTimer() {
+      if (forfeitTimerInterval) {
+        clearInterval(forfeitTimerInterval);
+        forfeitTimerInterval = null;
+      }
+    }
+
+    // Disconnect countdown
+    let disconnectInterval = null;
+    function startDisconnectCountdown(seconds) {
+      clearDisconnectCountdown();
+      let remaining = seconds;
+      document.getElementById('disconnectTimer').textContent = remaining;
+      disconnectInterval = setInterval(() => {
+        remaining--;
+        document.getElementById('disconnectTimer').textContent = remaining;
+        if (remaining <= 0) clearDisconnectCountdown();
+      }, 1000);
+    }
+
+    function clearDisconnectCountdown() {
+      if (disconnectInterval) {
+        clearInterval(disconnectInterval);
+        disconnectInterval = null;
+      }
+    }
+
+    // Queue
+    function enableQueue() {
+      document.getElementById('queueBtn').disabled = false;
+    }
+
+    async function joinQueue() {
+      log('Joining queue...');
+      const { status, data } = await api('POST', '/matches/queue');
+
+      if (data.status === 'queued') {
+        log('In queue, waiting for opponent...', 'info');
+        document.getElementById('queueBtn').disabled = true;
+        document.getElementById('leaveBtn').disabled = false;
+        document.getElementById('matchStatus').textContent = 'In Queue...';
+      } else if (data.status === 'matched') {
+        log(`Instantly matched! Match ID: ${data.matchId}`, 'event');
+        currentMatchId = data.matchId;
+        currentOpponentId = data.opponent?.id;
+        showMatchInfo(data);
+        socket.emit('match:join', { matchId: data.matchId, opponentId: data.opponent?.id });
+      } else if (data.status === 'already_in_match') {
+        log(`Already in match: ${data.matchId}`, 'event');
+        currentMatchId = data.matchId;
+        await loadMatchAndShow(data.matchId);
+      }
+    }
+
+    async function leaveQueue() {
+      log('Leaving queue...');
+      await api('DELETE', '/matches/queue');
+      document.getElementById('queueBtn').disabled = false;
+      document.getElementById('leaveBtn').disabled = true;
+      document.getElementById('matchStatus').textContent = 'Left queue';
+    }
+
+    // Match
+    async function showMatchInfo(data) {
+      currentMatchId = data.matchId;
+      document.getElementById('matchId').textContent = data.matchId.slice(0, 8) + '...';
+      document.getElementById('opponent').textContent = data.opponent?.username || 'Unknown';
+      document.getElementById('matchInfo').classList.remove('hidden');
+      document.getElementById('queueBtn').disabled = true;
+      document.getElementById('leaveBtn').disabled = true;
+
+      // Fetch match details
+      const { data: match } = await api('GET', `/matches/${data.matchId}`);
+      if (match?.problem) {
+        document.getElementById('problemTitle').textContent = match.problem.title;
+        document.getElementById('problemStatement').innerHTML = match.problem.statement || 'No statement available';
+        document.getElementById('problemCard').classList.remove('hidden');
+        // Auto-start after showing problem
+        autoStartMatch();
+      }
+    }
+
+    // Auto-start match with countdown
+    function autoStartMatch() {
+      document.getElementById('startCountdown').classList.remove('hidden');
+      let count = 3;
+      document.getElementById('countdownNum').textContent = count;
+
+      const countdown = setInterval(async () => {
+        count--;
+        if (count > 0) {
+          document.getElementById('countdownNum').textContent = count;
+        } else {
+          clearInterval(countdown);
+          document.getElementById('countdownNum').textContent = 'GO!';
+          // Start the match - only one player's call will succeed, that's fine
+          // The socket 'match:start' event will handle UI updates for both players
+          const { status, data } = await api('POST', `/matches/${currentMatchId}/start`);
+          if (status !== 200) {
+            // Check if match already started (not an error, other player started it first)
+            const isAlreadyStarted = data?.error?.includes('not in STARTING') ||
+                                     data?.error?.includes('already');
+            if (!isAlreadyStarted) {
+              log(`Failed to start: ${data?.error}`, 'error');
+            }
+            // Either way, hide countdown - socket event will show submit card
+            document.getElementById('startCountdown').classList.add('hidden');
+          }
+          // Don't update UI here - let socket 'match:start' event handle it for consistency
+        }
+      }, 1000);
+    }
+
+    // Submit
+    async function submitCode() {
+      const code = document.getElementById('code').value;
+      const language = document.getElementById('language').value;
+
+      log('Submitting code to AI Judge...');
+      document.getElementById('submitBtn').disabled = true;
+
+      const { status, data } = await api('POST', '/submissions', {
+        matchId: currentMatchId,
+        code,
+        language
+      });
+
+      document.getElementById('submitBtn').disabled = false;
+
+      if (status === 201) {
+        log(`Verdict: ${data.verdict}`, data.verdict === 'ACCEPTED' ? 'success' : 'error');
+        document.getElementById('verdictBox').innerHTML = `
+          <div class="verdict ${data.verdict}">${data.verdict}</div>
+        `;
+        if (data.matchEnded) {
+          log(`Match ended! Winner: ${data.winnerId === currentUser.id ? 'You!' : 'Opponent'}`, 'event');
+          // Fallback reset in case socket event doesn't arrive
+          setTimeout(resetForNewMatch, 3000);
+        }
+      } else if (status === 429) {
+        log('Judge is busy, try again...', 'error');
+      } else {
+        log(`Submit failed: ${formatError(data?.error)}`, 'error');
+      }
+    }
+
+    // Forfeit
+    async function forfeitMatch() {
+      if (!currentMatchId) return;
+      if (!confirm('Are you sure you want to forfeit? You will lose the match.')) return;
+
+      log('Forfeiting match...', 'error');
+      document.getElementById('forfeitBtn').disabled = true;
+
+      const { status, data } = await api('POST', `/matches/${currentMatchId}/forfeit`);
+
+      if (status === 200) {
+        log('You forfeited the match.', 'error');
+        document.getElementById('matchStatus').textContent = 'Forfeited';
+        // Fallback reset in case socket event doesn't arrive (reconnection issues)
+        setTimeout(resetForNewMatch, 3000);
+      } else {
+        log(`Forfeit failed: ${formatError(data?.error)}`, 'error');
+        document.getElementById('forfeitBtn').disabled = false;
+      }
+    }
+
+    // Auto-fill username
+    document.getElementById('username').value = `player_${Date.now().toString().slice(-6)}`;
+    document.getElementById('email').value = `player_${Date.now().toString().slice(-6)}@test.com`;
+
+    log('Ready! Register or login to start.', 'info');
+  </script>
+</body>
+</html>

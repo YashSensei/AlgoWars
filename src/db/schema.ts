@@ -32,6 +32,7 @@ export const verdictEnum = pgEnum("verdict", [
   "MEMORY_LIMIT",
   "RUNTIME_ERROR",
   "COMPILE_ERROR",
+  "JUDGE_TIMEOUT",
 ]);
 
 // ============================================
@@ -76,16 +77,25 @@ export const problems = pgTable(
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
     oj: varchar("oj", { length: 32 }).notNull(), // "codeforces"
-    externalId: varchar("external_id", { length: 32 }).notNull(), // "1A"
+    contestId: integer("contest_id").notNull(), // 2133
+    problemIndex: varchar("problem_index", { length: 8 }).notNull(), // "A", "B", "C1"
+    externalId: varchar("external_id", { length: 32 }).notNull(), // "2133A" (derived)
     title: varchar("title", { length: 255 }).notNull(),
-    difficulty: integer("difficulty"),
+    difficulty: integer("difficulty"), // rating: 800, 900, etc.
+    ratingBucket: varchar("rating_bucket", { length: 16 }), // "0800-1199"
     tags: text("tags").array(),
     url: text("url"),
+    statement: text("statement"), // HTML (lazy-fetched)
+    timeLimit: integer("time_limit"), // milliseconds
+    memoryLimit: integer("memory_limit"), // KB
+    solvedCount: integer("solved_count"),
     cachedAt: timestamp("cached_at").defaultNow().notNull(),
+    statementFetchedAt: timestamp("statement_fetched_at"), // null = not fetched yet
   },
   (t) => [
     uniqueIndex("oj_external_idx").on(t.oj, t.externalId),
     index("difficulty_idx").on(t.difficulty),
+    index("rating_bucket_idx").on(t.ratingBucket),
   ],
 );
 
@@ -132,7 +142,10 @@ export const matchPlayers = pgTable(
     ratingAfter: integer("rating_after"),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("match_user_idx").on(t.matchId, t.userId)],
+  (t) => [
+    uniqueIndex("match_user_idx").on(t.matchId, t.userId),
+    index("user_matches_idx").on(t.userId), // For finding user's matches
+  ],
 );
 
 // ============================================

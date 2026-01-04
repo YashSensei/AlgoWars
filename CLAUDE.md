@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AlgoWars is a real-time 1v1 competitive programming platform where users compete head-to-head solving algorithmic problems. The platform integrates with VJudge to fetch problems from Codeforces and submit solutions programmatically.
+AlgoWars is a real-time 1v1 competitive programming platform where users compete head-to-head solving algorithmic problems. The platform uses an AI-powered judge (Claude via MegaLLM) to evaluate code submissions. Note: VJudge integration was initially planned but abandoned due to Codeforces captcha blocking bot accounts.
 
 ## Commands
 
@@ -49,8 +49,8 @@ Uses `@/*` → `src/*` mapping (configured in tsconfig.json)
 `src/index.ts` → `src/app.ts` (Hono setup) → `src/routes/index.ts` (route aggregator)
 
 ### Key Directories
-- `src/routes/` - HTTP route handlers (auth, users, matches pending)
-- `src/services/` - Business logic (auth, vjudge, matchmaking pending)
+- `src/routes/` - HTTP route handlers (auth, users, matches, submissions)
+- `src/services/` - Business logic (auth, ai-judge, submission-queue, matchmaking)
 - `src/middleware/` - Hono middleware (auth JWT verification)
 - `src/db/` - Drizzle schema and seed scripts
 - `src/lib/` - Utilities (db client, env validation, error classes)
@@ -60,10 +60,10 @@ Uses `@/*` → `src/*` mapping (configured in tsconfig.json)
 ### Database Schema (src/db/schema.ts)
 Six tables with Drizzle relations:
 - `users` / `user_stats` - User accounts and rating stats (1:1)
-- `problems` - Cached Codeforces problems via VJudge
+- `problems` - Cached competitive programming problems
 - `matches` - Match instances with status and timing
 - `match_players` - Junction table (users ↔ matches)
-- `submissions` - Code submissions with VJudge verdicts
+- `submissions` - Code submissions with AI judge verdicts
 
 Enums: `GameMode`, `MatchStatus`, `PlayerResult`, `Verdict`
 
@@ -80,11 +80,11 @@ throw Errors.Conflict("msg")       // 409
 Validated via Zod in `src/lib/env.ts`. Required vars:
 - `DATABASE_URL` - PostgreSQL connection string
 - `JWT_SECRET` - Min 16 chars
-- `VJUDGE_USERNAME` / `VJUDGE_PASSWORD` - VJudge service account
+- `MEGALLM_API_KEY` - MegaLLM API key for AI judge (Claude)
 
 ### Pre-commit Hook
 Runs `bun run typecheck && bunx lint-staged` which applies Biome to staged `.ts`, `.tsx`, `.js`, `.json` files.
 
 ## Current Status
 
-Phases 1-3 complete (project setup, database, auth). Phase 4 (VJudge integration) is next. See `PLAN.md` for detailed roadmap.
+Phases 1-5 complete (project setup, database, auth, AI judge, matchmaking). VJudge integration was abandoned due to Codeforces captcha blocking bot accounts - using AI-powered judge (Claude via MegaLLM) instead. See `PLAN.md` for detailed roadmap.

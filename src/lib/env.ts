@@ -5,8 +5,9 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   DATABASE_URL: z.string().url(),
   JWT_SECRET: z.string().min(16),
-  VJUDGE_USERNAME: z.string(),
-  VJUDGE_PASSWORD: z.string(),
+  MEGALLM_API_KEY: z.string(),
+  AI_MODEL: z.string().default("claude-sonnet-4-5-20250929"),
+  AI_TIMEOUT_MS: z.coerce.number().default(30000),
 });
 
 export const env = envSchema.parse(process.env);

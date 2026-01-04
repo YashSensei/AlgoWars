@@ -9,8 +9,7 @@ on:
 env:
   DATABASE_URL: postgresql://test:test@localhost:5432/test
   JWT_SECRET: test-secret-key-for-ci-only
-  VJUDGE_USERNAME: test
-  VJUDGE_PASSWORD: test
+  MEGALLM_API_KEY: test-key-for-ci
 
 jobs:
   quality:

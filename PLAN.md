@@ -2,7 +2,9 @@
 
 ## Project Overview
 
-AlgoWars is a real-time 1v1 competitive programming platform where users compete head-to-head solving algorithmic problems. The platform integrates with VJudge to fetch problems from Codeforces and submit solutions programmatically.
+AlgoWars is a real-time 1v1 competitive programming platform where users compete head-to-head solving algorithmic problems. The platform uses an AI-powered judge (Claude via MegaLLM) to evaluate code submissions.
+
+> **Note:** VJudge integration was initially planned but abandoned because Codeforces captcha blocks bot account submissions. The AI judge is a PoC approach that can be swapped for a real judge (like Judge0 or custom sandbox) later.
 
 **Design Principles:**
 - 🎯 **Lean & Clean**: Minimal code, maximum clarity
@@ -55,10 +57,10 @@ Using Drizzle ORM with PostgreSQL. Schema defined in `src/db/schema.ts`.
 |-------|-------------|
 | `users` | User accounts (id, username, email, passwordHash) |
 | `user_stats` | Rating & win/loss stats (1:1 with users) |
-| `problems` | Cached problems from Codeforces via VJudge |
+| `problems` | Cached competitive programming problems |
 | `matches` | Match instances with status, timing, winner |
 | `match_players` | Junction table linking users to matches |
-| `submissions` | Code submissions with VJudge verdict |
+| `submissions` | Code submissions with AI judge verdicts |
 
 ### Enums
 
@@ -69,28 +71,77 @@ Using Drizzle ORM with PostgreSQL. Schema defined in `src/db/schema.ts`.
 
 ---
 
-## 🌐 VJudge Integration
+## 🌐 Problem & Judging Architecture
 
-### Endpoints Used
+### Key Principle
+```
+AlgoWars owns problems → AI Judge evaluates code
+```
 
-| Action | Method | Endpoint |
-|--------|--------|----------|
-| Login | POST | `/user/login` |
-| Get Problem | GET | `/problem/data` |
-| Submit | POST | `/problem/submit` |
-| Check Verdict | GET | `/solution/data/{runId}` |
+### Problem Sourcing
 
-### Language Map (Codeforces)
+**Two-Step Process:**
+
+1. **Ingest Metadata** (`bun scripts/ingest-problems.ts`)
+   - Load problem metadata from JSON files in `codeforces_scraped_problems/`
+   - Fields: contest_id, problem_index, name, rating, tags, url
+   - NO problem statement text (just links)
+
+2. **Fetch Statements** (`bun scripts/fetch-statements.ts`)
+   - Scrapes actual problem text from Codeforces HTML pages
+   - Extracts: statement, input/output specs, examples, notes
+   - Rate limited: 1 request per 2.5 seconds (Codeforces limit)
+   - Stores in `statement` column for AI judge
+
+**Rating Buckets:** `0800-1199`, `1200-1399`, `1400-1599`
+
+**Current Status:**
+- ~2900 problems metadata ingested
+- 100 problems with full statements (50 per bucket for 800-1399)
+- During matches, ALL problem data served from AlgoWars DB
+
+### AI Judge (PoC)
+
+Uses Claude (via MegaLLM API) to analyze code correctness. The judge evaluates:
+- **Correctness**: Edge cases, boundary conditions, negative numbers, duplicates
+- **Time Complexity**: O(n!) to O(log n) based on input constraints
+- **Memory Usage**: Stack overflow, large allocations
+- **Runtime Safety**: Division by zero, null access, infinite loops
+- **Syntax**: Compilation errors, missing imports
+
+### Supported Languages
 
 ```typescript
-const LANGUAGES = {
-  cpp17: 54,
-  cpp20: 73,
-  python3: 31,
-  java17: 87,
-  pypy3: 70,
-} as const
+type Language = "cpp17" | "cpp20" | "python3" | "java17" | "pypy3"
 ```
+
+### Verdicts
+
+| Verdict | Description |
+|---------|-------------|
+| `ACCEPTED` | Correct for all cases, optimal complexity |
+| `WRONG_ANSWER` | Logic error, fails on some test cases |
+| `TIME_LIMIT` | Correct logic but O(n²) when O(n) needed |
+| `MEMORY_LIMIT` | Excessive memory usage (>256MB) |
+| `RUNTIME_ERROR` | Crashes (segfault, division by zero) |
+| `COMPILE_ERROR` | Syntax errors, missing imports |
+| `INVALID_CODE` | Empty or doesn't attempt to solve |
+
+### Submission Flow
+
+```
+1. User submits code
+2. Backend validates user is in active match
+3. Build problem statement from DB
+4. Code + problem → AI Judge
+5. AI returns verdict with confidence & feedback
+6. Store submission, update match state
+```
+
+### Rate Limiting (MVP)
+- 1 active submission at a time (in-memory lock)
+- Returns 429 if judge is busy
+- Prevents queue flooding
 
 ---
 
@@ -113,10 +164,11 @@ algowars/
 │   │   └── matches.ts     # (pending)
 │   │
 │   ├── services/
-│   │   ├── auth.ts        # Auth logic, JWT
-│   │   ├── vjudge.ts      # VJudge API client
-│   │   ├── matchmaking.ts # (pending)
-│   │   └── match.ts       # (pending)
+│   │   ├── auth.ts            # Auth logic, JWT
+│   │   ├── ai-judge.ts        # AI Judge (Claude via MegaLLM)
+│   │   ├── submission-queue.ts # Single submission lock
+│   │   ├── matchmaking.ts     # (pending)
+│   │   └── match.ts           # (pending)
 │   │
 │   ├── middleware/
 │   │   └── auth.ts        # JWT verification
@@ -207,31 +259,76 @@ socket.on('match:end', { winnerId, reason })
 - [x] Password hashing (Bun.password)
 - [x] GET /users/me and /users/:id
 
-### Phase 4: VJudge Service ⬜
-- [ ] Session management (login, cookies)
-- [ ] Problem fetching
-- [ ] Solution submission
-- [ ] Verdict polling
+### Phase 4: AI Judge Service ✅
 
-### Phase 5: Matchmaking ⬜
-- [ ] Queue (in-memory)
-- [ ] Pairing logic (by rating ±100)
-- [ ] Problem selection (random from pool)
+> **Note:** VJudge was originally planned but abandoned because Codeforces captcha blocks bot submissions. Pivoted to AI-powered judging as a PoC.
 
-### Phase 6: Match Engine ⬜
-- [ ] State machine (WAITING → ACTIVE → COMPLETED)
-- [ ] Timer handling (10 min timeout)
-- [ ] Rating updates (+5/-5)
+#### 4.1 AI Judge (`src/services/ai-judge.ts`)
+- [x] Claude integration via MegaLLM OpenAI-compatible API
+- [x] Comprehensive prompt evaluating correctness, complexity, memory, runtime safety
+- [x] JSON response parsing with markdown stripping
+- [x] Verdict types: ACCEPTED, WRONG_ANSWER, TIME_LIMIT, MEMORY_LIMIT, RUNTIME_ERROR, COMPILE_ERROR, INVALID_CODE
 
-### Phase 7: WebSocket ⬜
-- [ ] Socket.IO setup
-- [ ] Room management
-- [ ] Real-time event handlers
+#### 4.2 Submission Queue (`src/services/submission-queue.ts`)
+- [x] In-memory lock (1 active submission at a time)
+- [x] Returns 429 "busy" if judge is processing
+- [x] Immediate verdict return (AI is fast)
 
-### Phase 8: Integration ⬜
-- [ ] Submit flow end-to-end
-- [ ] Error handling
-- [ ] Testing
+#### 4.3 API Endpoint (`src/routes/submissions.ts`)
+- [x] `POST /submissions` - validate match, build problem statement, call AI judge
+- [x] `GET /submissions/status` - check current submission status
+- [x] `GET /submissions/:id` - get submission details
+- [x] Map AI verdicts to DB enum
+
+### Phase 5: Matchmaking ✅
+- [x] Queue (in-memory Map)
+- [x] Pairing logic (by rating ±100)
+- [x] Problem selection (random from rating bucket)
+- [x] Match routes (queue, leave, status, details, start)
+
+### Phase 6: Match Engine ✅
+- [x] State machine (STARTING → ACTIVE → COMPLETED/ABORTED)
+- [x] Timer handling (10 min timeout with auto-abort)
+- [x] Rating updates (+5 win, -5 loss, -5 each on abort)
+- [x] Win detection (first ACCEPTED verdict wins)
+
+### Phase 7: WebSocket ✅
+- [x] Socket.IO setup with Hono (getRequestListener pattern)
+- [x] JWT authentication middleware for socket connections
+- [x] Room management (user rooms, match rooms)
+- [x] Real-time event handlers (queue:matched, match:countdown, match:start, match:submission, match:end)
+- [x] Integration with matchmaking and match-engine services
+
+### Phase 8: Integration & Testing ✅
+- [x] Submit flow end-to-end (register → queue → match → submit → verdict)
+- [x] Edge case handling and input validation
+- [x] WebSocket test script (`test-socket.ts`)
+- [x] Full integration test script (`test-integration.ts`)
+
+### Phase 9: Admin Panel ⬜
+- [ ] Add `role` column to users (USER, ADMIN)
+- [ ] Admin middleware (role check)
+- [ ] Problem management routes (bulk import, fetch statements)
+- [ ] User management routes (view, ban, rating adjust)
+- [ ] Match management routes (view, force-end)
+
+### Phase 10: Frontend ⬜ 👈 START HERE FOR UI
+- [ ] Choose framework (React/Next.js or Vue/Nuxt)
+- [ ] Setup project structure and routing
+- [ ] Authentication pages (login, register)
+- [ ] Dashboard (user stats, match history)
+- [ ] Matchmaking UI (queue, match found animation)
+- [ ] Match page (problem display, code editor, submit)
+- [ ] **Match Results Screen** (winner/loser, both players' code, new ratings, rating change)
+- [ ] Real-time updates via Socket.IO client
+- [ ] Responsive design (mobile-friendly)
+
+### Phase 11: MongoDB Integration ⬜
+- [ ] Setup MongoDB (Docker or Atlas)
+- [ ] Migrate match history to MongoDB (better for time-series)
+- [ ] Store submission code in MongoDB (large text)
+- [ ] Keep PostgreSQL for users, ratings, active matches
+- [ ] Hybrid approach: PG for relational, Mongo for documents
 
 ---
 
@@ -248,9 +345,8 @@ DATABASE_URL=postgresql://algowars:algowars@localhost:5432/algowars
 # Auth
 JWT_SECRET=your-secret-key-min-16-chars
 
-# VJudge
-VJUDGE_USERNAME=your_username
-VJUDGE_PASSWORD=your_password
+# AI Judge (MegaLLM)
+MEGALLM_API_KEY=your_megallm_api_key
 ```
 
 ---
@@ -272,8 +368,16 @@ bun run typecheck     # Verify types
 docker compose up -d  # Start PostgreSQL
 bun run db:generate   # Generate migrations
 bun run db:migrate    # Apply migrations
-bun run db:seed       # Seed problems
 bun run db:studio     # Visual DB browser
+
+# Problem Management
+bun scripts/ingest-problems.ts    # Load problem metadata from JSON
+bun scripts/fetch-statements.ts   # Bulk fetch 100 statements (~4 min)
+bun scripts/fetch-single.ts 1A    # Fetch single problem by ID
+
+# Testing
+bun scripts/test-api.ts           # Test all API endpoints
+bun scripts/test-matchmaking.ts   # Test matchmaking flow
 ```
 
 ---
@@ -291,9 +395,55 @@ bun run db:studio     # Visual DB browser
 
 ---
 
+## 🔧 Admin Panel (Planned)
+
+### Problem Management
+- **Bulk Import**: Upload JSON file with problem metadata → auto-fetch statements from Codeforces
+- **Manual Add**: Add individual problems with custom statements
+- **Fetch Statements**: Trigger statement fetch for problems missing them
+- **Problem Stats**: View problem usage, solve rates, etc.
+
+### User Management
+- View/search users
+- Rating adjustments (manual)
+- Ban/suspend accounts
+
+### Match Management
+- View active/completed matches
+- Force-end stuck matches
+- View match history with submissions
+
+### Implementation Plan
+```
+src/routes/admin.ts     # Admin-only routes (role check middleware)
+src/middleware/admin.ts # isAdmin check
+users table             # Add `role` column (USER, ADMIN)
+```
+
+### Scripts Available Now
+```bash
+bun scripts/ingest-problems.ts    # Load problems from JSON files
+bun scripts/fetch-statements.ts   # Fetch statements from Codeforces
+```
+
+---
+
 ## 🚦 Current Status
 
-**Completed:** Phases 1-3 (Project Setup, Database, Auth)
-**Next Up:** Phase 4 (VJudge Integration)
+**Completed:** Phases 1-8 (Project Setup, Database, Auth, AI Judge, Matchmaking, Match Engine, WebSocket, Integration Testing)
+**In Progress:** None
+**Next:** Phase 9 (Admin Panel) or Phase 10 (Frontend) - can be done in parallel
 
-Ready to build the VJudge service for submitting code and polling verdicts! 🚀
+### Notes:
+- VJudge abandoned → AI judge (Claude via MegaLLM) as PoC
+- Matchmaking uses in-memory queue with rating-based pairing (±100)
+- Problem selection picks random problem from rating bucket
+- Match engine uses in-memory timers for 10-min timeout
+- First ACCEPTED submission wins the match
+- WebSocket uses Socket.IO with JWT auth, integrated with Hono via getRequestListener
+
+### Problem Database:
+- ~2900 problem metadata ingested (from Codeforces JSON)
+- **98 problems with full statements** (52 in 800-1199, 46 in 1200-1399)
+- Statements scraped via HTML (Codeforces API doesn't provide them)
+- Rate limit: 1 req/2.5s to avoid Codeforces blocking
