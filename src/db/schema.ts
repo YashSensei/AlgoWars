@@ -14,6 +14,7 @@ import {
 // ENUMS
 // ============================================
 
+export const userRoleEnum = pgEnum("user_role", ["USER", "ADMIN"]);
 export const gameModeEnum = pgEnum("game_mode", ["BLITZ"]);
 export const matchStatusEnum = pgEnum("match_status", [
   "WAITING",
@@ -46,6 +47,7 @@ export const users = pgTable("users", {
   username: varchar("username", { length: 32 }).notNull().unique(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  role: userRoleEnum("role").default("USER").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

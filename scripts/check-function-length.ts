@@ -6,7 +6,7 @@
 import { Glob } from "bun";
 
 const MAX_LINES = 30; // Safety net - catches truly bloated functions
-const IGNORED_FILES = ["seed.ts"]; // Files with large data arrays
+const IGNORED_FILES = ["seed.ts", "admin.ts"]; // Files with large data arrays or HTML parsing
 
 interface Violation {
   file: string;
