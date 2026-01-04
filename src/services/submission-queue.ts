@@ -1,9 +1,10 @@
 /**
  * Submission Queue Service
- * Ensures only 1 submission is processed at a time
- * Uses AI Judge for PoC (can swap to real judge later)
+ * Uses per-user locks to allow concurrent submissions from different users
+ * while preventing a single user from spamming submissions
  */
 
+import { logger } from "../lib/logger";
 import { judgeCode } from "./ai-judge";
 
 export type Language = "cpp17" | "cpp20" | "python3" | "java17" | "pypy3";
@@ -33,48 +34,74 @@ export interface SubmissionStatus {
 }
 
 class SubmissionQueue {
-  private currentSubmission: QueuedSubmission | null = null;
-  private isJudging = false;
+  // Per-user active submissions (userId -> submission)
+  private activeSubmissions = new Map<string, QueuedSubmission>();
 
   /**
-   * Check if queue is currently processing
+   * Check if a specific user has an active submission
    */
-  isBusy(): boolean {
-    return this.isJudging;
+  isUserBusy(userId: string): boolean {
+    return this.activeSubmissions.has(userId);
   }
 
   /**
-   * Get current submission info
+   * Get count of active submissions (for monitoring)
    */
-  getCurrentSubmission(): QueuedSubmission | null {
-    return this.currentSubmission;
+  getActiveCount(): number {
+    return this.activeSubmissions.size;
   }
 
   /**
-   * Atomically try to acquire the judging lock
-   * Returns true if lock acquired, false if busy
+   * Get user's current submission
    */
-  private tryAcquireLock(): boolean {
-    if (this.isJudging) return false;
-    this.isJudging = true;
+  getUserSubmission(userId: string): QueuedSubmission | null {
+    return this.activeSubmissions.get(userId) ?? null;
+  }
+
+  /**
+   * Try to acquire lock for a specific user
+   */
+  private tryAcquireLock(userId: string): boolean {
+    if (this.activeSubmissions.has(userId)) return false;
+    // Set placeholder to acquire lock
+    this.activeSubmissions.set(userId, {} as QueuedSubmission);
     return true;
   }
 
   /**
+   * Release lock for a specific user
+   */
+  private releaseLock(userId: string): void {
+    this.activeSubmissions.delete(userId);
+  }
+
+  /**
    * Submit code for AI judging
-   * Returns verdict directly (AI judge is fast)
+   * Allows concurrent submissions from different users
    */
   async submit(submission: QueuedSubmission): Promise<SubmissionStatus> {
-    // Atomic lock acquisition
-    if (!this.tryAcquireLock()) {
+    // Per-user lock acquisition
+    if (!this.tryAcquireLock(submission.userId)) {
+      logger.debug(
+        "Submission",
+        `User ${submission.userId.slice(0, 8)} rejected - already judging`,
+      );
       return { status: "busy" };
     }
 
-    this.currentSubmission = submission;
-    const submissionId = `ai-${Date.now()}`;
+    // Store actual submission
+    this.activeSubmissions.set(submission.userId, submission);
+    const submissionId = `ai-${Date.now()}-${submission.userId.slice(0, 8)}`;
+
+    logger.info("Submission", `Processing submission ${submissionId}`, {
+      user: submission.userId.slice(0, 8),
+      language: submission.language,
+      codeLength: submission.code.length,
+      activeCount: this.activeSubmissions.size,
+    });
 
     try {
-      // Call AI judge
+      // Call AI judge (can run concurrently for different users)
       const result = await judgeCode(
         submission.problemStatement,
         submission.code,
@@ -88,39 +115,41 @@ class SubmissionQueue {
         isFinal: true,
       };
 
-      this.clearQueue();
+      logger.info("Submission", `Verdict: ${result.verdict}`, {
+        submissionId,
+        confidence: result.confidence,
+      });
+
       return { status: "complete", submissionId, verdict };
     } catch (err) {
-      this.clearQueue();
       const message = err instanceof Error ? err.message : "Unknown error";
+      logger.error("Submission", `AI judge error for ${submissionId}`, { error: message });
       return { status: "complete", submissionId, error: message };
+    } finally {
+      // Always release lock
+      this.releaseLock(submission.userId);
     }
   }
 
   /**
-   * Poll for verdict (for compatibility - AI returns immediately)
+   * Poll for user's verdict status
    */
-  async pollResult(): Promise<SubmissionStatus> {
-    if (!this.currentSubmission) {
+  async pollResult(userId: string): Promise<SubmissionStatus> {
+    if (!this.activeSubmissions.has(userId)) {
       return { status: "complete", error: "No active submission" };
     }
-    // AI judge returns immediately, so if we're here, it's still processing
     return { status: "judging" };
   }
 
   /**
-   * Clear the queue
+   * Force clear a user's submission (admin use)
    */
-  private clearQueue(): void {
-    this.currentSubmission = null;
-    this.isJudging = false;
-  }
-
-  /**
-   * Force clear (admin use)
-   */
-  forceReset(): void {
-    this.clearQueue();
+  forceReset(userId?: string): void {
+    if (userId) {
+      this.activeSubmissions.delete(userId);
+    } else {
+      this.activeSubmissions.clear();
+    }
   }
 }
 

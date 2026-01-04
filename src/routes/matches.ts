@@ -15,7 +15,6 @@ import { Errors } from "../lib/errors";
 import { authMiddleware } from "../middleware/auth";
 import { matchEngine } from "../services/match-engine";
 import { matchmaking } from "../services/matchmaking";
-import { socketEmit } from "../socket";
 
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -62,7 +61,7 @@ matchRoutes.post("/queue", async (c) => {
  */
 matchRoutes.delete("/queue", async (c) => {
   const user = c.get("user");
-  const removed = matchmaking.leave(user.id);
+  const removed = await matchmaking.leave(user.id);
   return c.json({ removed });
 });
 
@@ -128,45 +127,25 @@ matchRoutes.get("/:id", async (c) => {
 /**
  * POST /matches/:id/start
  * Start an active match (changes STARTING → ACTIVE)
+ * Delegates to matchEngine which handles locking and state machine validation
  */
 matchRoutes.post("/:id/start", async (c) => {
   const { id } = c.req.param();
   if (!isValidUUID(id)) throw Errors.BadRequest("Invalid match ID");
   const user = c.get("user");
 
-  // Verify user is in this match (query by BOTH matchId AND userId)
-  const player = await db.query.matchPlayers.findFirst({
-    where: and(eq(matchPlayers.matchId, id), eq(matchPlayers.userId, user.id)),
-    with: { match: true },
-  });
+  // Delegate to match engine - handles mutex, state validation, timers, socket events
+  const result = await matchEngine.start(id, user.id);
 
-  if (!player) {
-    throw Errors.Forbidden("You are not in this match");
+  if (!result.success) {
+    if (result.error === "You are not in this match") {
+      throw Errors.Forbidden(result.error);
+    }
+    throw Errors.BadRequest(result.error ?? "Cannot start match");
   }
 
-  if (player.match.status !== "STARTING") {
-    throw Errors.BadRequest("Match is not in STARTING state");
-  }
-
-  // Update to ACTIVE and start timer
-  const now = new Date();
-  await db.update(matches).set({ status: "ACTIVE", startedAt: now }).where(eq(matches.id, id));
-
-  // Start 10-minute match timer (duration is in seconds, timer needs ms)
-  const durationMs = (player.match.duration ?? 600) * 1000;
-  matchEngine.startTimer(id, durationMs);
-
-  // Fetch problem for socket emission
-  const matchWithProblem = await db.query.matches.findFirst({
-    where: eq(matches.id, id),
-    with: { problem: { columns: { id: true, title: true, statement: true, difficulty: true } } },
-  });
-
-  // Emit match start event to all players in the room
-  const endsAt = new Date(now.getTime() + durationMs).toISOString();
-  socketEmit.matchStart(id, { problem: matchWithProblem?.problem, endsAt });
-
-  return c.json({ status: "ACTIVE", startedAt: now, endsAt: new Date(now.getTime() + durationMs) });
+  // Return success (alreadyActive means other player started first - still success)
+  return c.json({ status: "ACTIVE", alreadyStarted: result.alreadyActive ?? false });
 });
 
 /**

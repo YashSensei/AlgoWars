@@ -6,6 +6,7 @@
 
 import OpenAI from "openai";
 import { env } from "../lib/env";
+import { logger } from "../lib/logger";
 
 const client = new OpenAI({
   baseURL: "https://ai.megallm.io/v1",
@@ -27,7 +28,9 @@ export interface JudgeResult {
   confidence: number; // 0-100
 }
 
-const JUDGE_PROMPT = `You are an expert competitive programming judge. Analyze the code solution with the rigor of Codeforces/LeetCode judges.
+const JUDGE_SYSTEM = `You are a competitive programming judge API. Output ONLY JSON. No explanations. No hints. No analysis.`;
+
+const JUDGE_PROMPT = `Judge this code submission. Do NOT reveal why it failed or give hints.
 
 PROBLEM:
 {problem}
@@ -35,55 +38,10 @@ PROBLEM:
 CODE ({language}):
 {code}
 
-EVALUATION CRITERIA (check ALL):
+VERDICTS: ACCEPTED, WRONG_ANSWER, TIME_LIMIT, MEMORY_LIMIT, RUNTIME_ERROR, COMPILE_ERROR, INVALID_CODE
 
-1. CORRECTNESS - Does it produce correct output for:
-   - Basic/sample cases
-   - Edge cases (empty input, single element, maximum values)
-   - Boundary conditions (n=0, n=1, n=max)
-   - Negative numbers (if applicable)
-   - Duplicate values
-   - Already sorted/reverse sorted input
-
-2. TIME COMPLEXITY - Will it pass within time limits?
-   - n ≤ 10: O(n!) acceptable
-   - n ≤ 20: O(2^n) acceptable
-   - n ≤ 500: O(n³) acceptable
-   - n ≤ 5000: O(n²) acceptable
-   - n ≤ 10^6: O(n log n) required
-   - n ≤ 10^8: O(n) or O(log n) required
-   - Nested loops over large inputs = TLE
-   - Recursion without memoization on overlapping subproblems = TLE
-
-3. MEMORY - Will it exceed memory limits (~256MB)?
-   - Arrays larger than 10^8 elements = MLE
-   - Unbounded recursion depth = stack overflow
-   - Creating copies of large data structures unnecessarily
-
-4. RUNTIME SAFETY:
-   - Division by zero
-   - Array index out of bounds
-   - Null/undefined access
-   - Integer overflow (use long long for large products/sums)
-   - Infinite loops
-
-5. SYNTAX & COMPILATION:
-   - Missing includes/imports
-   - Syntax errors
-   - Type mismatches
-   - Missing main function (for C++/Java)
-
-VERDICTS:
-- ACCEPTED: Correct for ALL cases, optimal complexity, no runtime issues
-- WRONG_ANSWER: Logic error, fails on some test cases, incorrect algorithm
-- TIME_LIMIT: Correct logic but O(n²) when O(n) needed, will timeout
-- MEMORY_LIMIT: Excessive memory usage, will exceed 256MB
-- RUNTIME_ERROR: Will crash (segfault, division by zero, stack overflow)
-- COMPILE_ERROR: Syntax errors, missing imports, won't compile
-- INVALID_CODE: Empty, placeholder, or doesn't attempt to solve the problem
-
-Respond with ONLY this JSON (no markdown, no backticks):
-{"verdict":"<VERDICT>","confidence":<0-100>,"feedback":"<specific explanation with example failing case if not ACCEPTED>"}`;
+Output ONLY this JSON (no other text):
+{"verdict":"VERDICT_HERE","confidence":85}`;
 
 const VALID_VERDICTS: Verdict[] = [
   "ACCEPTED",
@@ -102,22 +60,70 @@ function buildPrompt(problem: string, code: string, language: string): string {
     .replace("{language}", language);
 }
 
+// Extract JSON from potentially mixed text response
+function extractJSON(content: string): string | null {
+  // Remove markdown code blocks (```json ... ``` or ``` ... ```)
+  const cleaned = content.replace(/```(?:json)?\s*([\s\S]*?)\s*```/g, "$1").trim();
+
+  // Try direct parse if it looks like JSON
+  if (cleaned.startsWith("{") && cleaned.endsWith("}")) {
+    return cleaned;
+  }
+
+  // Try to find a complete JSON object with verdict
+  const jsonMatch = cleaned.match(/\{[^{}]*"verdict"\s*:\s*"[A-Z_]+[^{}]*\}/);
+  if (jsonMatch) {
+    return jsonMatch[0];
+  }
+
+  // Fallback: find any {...} containing verdict (less strict)
+  const looseMatch = cleaned.match(/\{[\s\S]*?"verdict"[\s\S]*?\}/);
+  if (looseMatch) {
+    try {
+      JSON.parse(looseMatch[0]);
+      return looseMatch[0];
+    } catch {
+      // Not valid JSON, continue
+    }
+  }
+
+  return null;
+}
+
+// Handle case when no JSON could be extracted
+function handleNoJSON(content: string): JudgeResult {
+  logger.warn("AI-Judge", "Failed to extract JSON", { preview: content.slice(0, 200) });
+
+  const lower = content.toLowerCase();
+  if (lower.includes("cannot") || lower.includes("refuse") || lower.includes("sorry")) {
+    return { verdict: "WRONG_ANSWER", confidence: 30, feedback: "Judge was unable to evaluate" };
+  }
+  return { verdict: "WRONG_ANSWER", confidence: 0, feedback: "Invalid judge response format" };
+}
+
+// Validate and normalize confidence value
+function normalizeConfidence(confidence: unknown): number {
+  if (typeof confidence !== "number" || Number.isNaN(confidence)) return 50;
+  return Math.max(0, Math.min(100, confidence));
+}
+
 // Parse and validate AI response
 function parseResponse(content: string): JudgeResult {
-  const jsonStr = content.replace(/^```(?:json)?\s*|\s*```$/g, "").trim();
-  const result = JSON.parse(jsonStr) as JudgeResult;
+  const jsonStr = extractJSON(content);
+  if (!jsonStr) return handleNoJSON(content);
 
-  // Validate verdict
+  let result: JudgeResult;
+  try {
+    result = JSON.parse(jsonStr) as JudgeResult;
+  } catch {
+    return { verdict: "WRONG_ANSWER", confidence: 0, feedback: "Failed to parse judge response" };
+  }
+
   if (!VALID_VERDICTS.includes(result.verdict)) {
-    return { verdict: "WRONG_ANSWER", confidence: 50, feedback: "Invalid judge response" };
+    return { verdict: "WRONG_ANSWER", confidence: 50, feedback: "Invalid verdict" };
   }
 
-  // Validate confidence (clamp to 0-100)
-  if (typeof result.confidence !== "number" || Number.isNaN(result.confidence)) {
-    result.confidence = 50;
-  } else {
-    result.confidence = Math.max(0, Math.min(100, result.confidence));
-  }
+  result.confidence = normalizeConfidence(result.confidence);
 
   return result;
 }
@@ -125,7 +131,15 @@ function parseResponse(content: string): JudgeResult {
 // Call AI API with timeout
 async function callAI(prompt: string, signal: AbortSignal): Promise<string | null> {
   const response = await client.chat.completions.create(
-    { model: env.AI_MODEL, messages: [{ role: "user", content: prompt }], max_tokens: 500 },
+    {
+      model: env.AI_MODEL,
+      messages: [
+        { role: "system", content: JUDGE_SYSTEM },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 300,
+      temperature: 0.1, // Low temperature for consistent JSON output
+    },
     { signal },
   );
   return response.choices[0]?.message?.content?.trim() ?? null;
@@ -160,23 +174,4 @@ export async function judgeCode(
   } finally {
     clearTimeout(timeout);
   }
-}
-
-// Quick validation without full judging (for syntax check)
-export function quickValidate(code: string, language: string): boolean {
-  if (!code.trim()) return false;
-  if (code.length < 10) return false;
-
-  // Basic language-specific checks
-  if (language === "cpp17" || language === "cpp20") {
-    return code.includes("main") && (code.includes("#include") || code.includes("int main"));
-  }
-  if (language === "python3" || language === "pypy3") {
-    return code.length > 5; // Python is flexible
-  }
-  if (language === "java17") {
-    return code.includes("class") && code.includes("main");
-  }
-
-  return true;
 }

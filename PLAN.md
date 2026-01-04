@@ -312,7 +312,18 @@ socket.on('match:end', { winnerId, reason })
 - [ ] User management routes (view, ban, rating adjust)
 - [ ] Match management routes (view, force-end)
 
-### Phase 10: MongoDB Integration ⬜
+### Phase 10: Frontend ⬜ 👈 START HERE FOR UI
+- [ ] Choose framework (React/Next.js or Vue/Nuxt)
+- [ ] Setup project structure and routing
+- [ ] Authentication pages (login, register)
+- [ ] Dashboard (user stats, match history)
+- [ ] Matchmaking UI (queue, match found animation)
+- [ ] Match page (problem display, code editor, submit)
+- [ ] **Match Results Screen** (winner/loser, both players' code, new ratings, rating change)
+- [ ] Real-time updates via Socket.IO client
+- [ ] Responsive design (mobile-friendly)
+
+### Phase 11: MongoDB Integration ⬜
 - [ ] Setup MongoDB (Docker or Atlas)
 - [ ] Migrate match history to MongoDB (better for time-series)
 - [ ] Store submission code in MongoDB (large text)
@@ -421,7 +432,7 @@ bun scripts/fetch-statements.ts   # Fetch statements from Codeforces
 
 **Completed:** Phases 1-8 (Project Setup, Database, Auth, AI Judge, Matchmaking, Match Engine, WebSocket, Integration Testing)
 **In Progress:** None
-**Next:** Phase 9 (Admin Panel)
+**Next:** Phase 9 (Admin Panel) or Phase 10 (Frontend) - can be done in parallel
 
 ### Notes:
 - VJudge abandoned → AI judge (Claude via MegaLLM) as PoC

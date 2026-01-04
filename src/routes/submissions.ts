@@ -122,10 +122,11 @@ submissionRoutes.post("/", async (c) => {
 
 /**
  * GET /submissions/status
- * Get current submission status
+ * Get current submission status for the authenticated user
  */
 submissionRoutes.get("/status", async (c) => {
-  const result = await submissionQueue.pollResult();
+  const user = c.get("user");
+  const result = await submissionQueue.pollResult(user.id);
   return c.json(result);
 });
 

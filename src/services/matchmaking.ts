@@ -1,11 +1,14 @@
 /**
  * Matchmaking Service
  * In-memory queue with rating-based pairing
+ * Uses mutex for atomic queue operations
  */
 
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { matches, matchPlayers, problems, userStats, users } from "../db/schema";
 import { db } from "../lib/db";
+import { logger } from "../lib/logger";
+import { Mutex } from "../lib/mutex";
 import { socketEmit } from "../socket";
 
 const RATING_RANGE = 100; // Match players within ±100 rating
@@ -18,6 +21,9 @@ interface QueuedPlayer {
 
 // In-memory queue
 const queue: Map<string, QueuedPlayer> = new Map();
+
+// Single mutex for all queue operations (prevents double-matching)
+const queueMutex = new Mutex();
 
 // Get player's rating bucket for problem selection
 function getRatingBucket(rating: number): string {
@@ -49,13 +55,41 @@ async function selectProblem(avgRating: number): Promise<string | null> {
   return problem?.id ?? null;
 }
 
+// Notify both players about the match
+async function notifyMatchedPlayers(
+  matchId: string,
+  p1: QueuedPlayer,
+  p2: QueuedPlayer,
+): Promise<void> {
+  const [user1, user2] = await Promise.all([
+    db.query.users.findFirst({ where: eq(users.id, p1.userId), columns: { username: true } }),
+    db.query.users.findFirst({ where: eq(users.id, p2.userId), columns: { username: true } }),
+  ]);
+
+  logger.info("Matchmaking", `Match created: ${matchId.slice(0, 8)}`, {
+    player1: `${user1?.username} (${p1.rating})`,
+    player2: `${user2?.username} (${p2.rating})`,
+  });
+
+  socketEmit.queueMatched(p1.userId, {
+    matchId,
+    opponentId: p2.userId,
+    opponentName: user2?.username ?? "Opponent",
+  });
+  socketEmit.queueMatched(p2.userId, {
+    matchId,
+    opponentId: p1.userId,
+    opponentName: user1?.username ?? "Opponent",
+  });
+}
+
 // Create match with two players
 async function createMatch(p1: QueuedPlayer, p2: QueuedPlayer): Promise<string> {
   const avgRating = Math.round((p1.rating + p2.rating) / 2);
   const problemId = await selectProblem(avgRating);
 
-  // Ensure we have a problem before creating match
   if (!problemId) {
+    logger.error("Matchmaking", `No problems available (avg rating: ${avgRating})`);
     throw new Error("No problems available for this rating bracket");
   }
 
@@ -63,7 +97,6 @@ async function createMatch(p1: QueuedPlayer, p2: QueuedPlayer): Promise<string> 
     .insert(matches)
     .values({ problemId, status: "STARTING" })
     .returning({ id: matches.id });
-
   const matchId = result[0]?.id;
   if (!matchId) throw new Error("Failed to create match");
 
@@ -72,16 +105,7 @@ async function createMatch(p1: QueuedPlayer, p2: QueuedPlayer): Promise<string> 
     { matchId, userId: p2.userId, ratingBefore: p2.rating },
   ]);
 
-  // Fetch usernames for socket notifications
-  const [user1, user2] = await Promise.all([
-    db.query.users.findFirst({ where: eq(users.id, p1.userId), columns: { username: true } }),
-    db.query.users.findFirst({ where: eq(users.id, p2.userId), columns: { username: true } }),
-  ]);
-
-  // Notify both players via WebSocket
-  socketEmit.queueMatched(p1.userId, { matchId, opponentName: user2?.username ?? "Opponent" });
-  socketEmit.queueMatched(p2.userId, { matchId, opponentName: user1?.username ?? "Opponent" });
-
+  await notifyMatchedPlayers(matchId, p1, p2);
   return matchId;
 }
 
@@ -101,42 +125,76 @@ async function hasActiveMatch(userId: string): Promise<string | null> {
 
 // Public API
 export const matchmaking = {
-  // Join queue, returns matchId if paired immediately or already in match
+  /**
+   * Join queue - atomic operation using mutex
+   * Returns matchId if paired immediately or already in match
+   */
   async join(
     userId: string,
   ): Promise<{ status: "queued" | "matched" | "already_in_match"; matchId?: string }> {
-    // Check if already in an active match
+    // Check if already in an active match (outside lock - read-only)
     const existingMatchId = await hasActiveMatch(userId);
     if (existingMatchId) {
+      logger.info(
+        "Matchmaking",
+        `User ${userId.slice(0, 8)} already in match ${existingMatchId.slice(0, 8)}`,
+      );
       return { status: "already_in_match", matchId: existingMatchId };
     }
 
-    // Check if already in queue
-    if (queue.has(userId)) {
-      return { status: "queued" };
-    }
-
+    // Get user stats (outside lock - read-only)
     const stats = await db.query.userStats.findFirst({
       where: eq(userStats.userId, userId),
     });
-    if (!stats) throw new Error("User stats not found");
-
-    const player: QueuedPlayer = { userId, rating: stats.rating, joinedAt: Date.now() };
-    const opponent = findMatch(player);
-
-    if (opponent) {
-      queue.delete(opponent.userId);
-      const matchId = await createMatch(player, opponent);
-      return { status: "matched", matchId };
+    if (!stats) {
+      logger.error("Matchmaking", `User stats not found for ${userId.slice(0, 8)}`);
+      throw new Error("User stats not found");
     }
 
-    queue.set(userId, player);
-    return { status: "queued" };
+    // All queue mutations happen inside mutex
+    return queueMutex.withLock(async () => {
+      // Check if already in queue (re-check inside lock)
+      if (queue.has(userId)) {
+        logger.debug("Matchmaking", `User ${userId.slice(0, 8)} already in queue`);
+        return { status: "queued" };
+      }
+
+      const player: QueuedPlayer = { userId, rating: stats.rating, joinedAt: Date.now() };
+      const opponent = findMatch(player);
+
+      if (opponent) {
+        // Atomic: remove opponent from queue and create match
+        queue.delete(opponent.userId);
+        logger.info(
+          "Matchmaking",
+          `Matched ${userId.slice(0, 8)} (${stats.rating}) with ${opponent.userId.slice(0, 8)} (${opponent.rating})`,
+        );
+        const matchId = await createMatch(player, opponent);
+        return { status: "matched", matchId };
+      }
+
+      // No opponent found, add to queue
+      queue.set(userId, player);
+      logger.info("Matchmaking", `User ${userId.slice(0, 8)} (${stats.rating}) joined queue`, {
+        queueSize: queue.size,
+      });
+      return { status: "queued" };
+    });
   },
 
-  // Leave queue
-  leave(userId: string): boolean {
-    return queue.delete(userId);
+  /**
+   * Leave queue - atomic operation using mutex
+   */
+  async leave(userId: string): Promise<boolean> {
+    return queueMutex.withLock(async () => {
+      const removed = queue.delete(userId);
+      if (removed) {
+        logger.info("Matchmaking", `User ${userId.slice(0, 8)} left queue`, {
+          queueSize: queue.size,
+        });
+      }
+      return removed;
+    });
   },
 
   // Check if user is in queue
