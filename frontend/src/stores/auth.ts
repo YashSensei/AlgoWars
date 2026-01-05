@@ -3,6 +3,24 @@ import { persist } from "zustand/middleware";
 import { authApi, ApiClientError } from "@/lib/api";
 import type { User } from "@/lib/api";
 
+// Mock user for development (when backend is not running)
+const DEV_MOCK_USER: User = {
+  id: "dev-user-1",
+  username: "DevWarrior",
+  email: "dev@algowars.io",
+  createdAt: new Date().toISOString(),
+  stats: {
+    id: "stats-1",
+    userId: "dev-user-1",
+    rating: 1450,
+    wins: 12,
+    losses: 5,
+    draws: 1,
+    winStreak: 3,
+    updatedAt: new Date().toISOString(),
+  },
+};
+
 interface AuthState {
   // State
   user: User | null;
@@ -13,6 +31,7 @@ interface AuthState {
   // Actions
   login: (email: string, password: string) => Promise<boolean>;
   register: (username: string, email: string, password: string) => Promise<boolean>;
+  loginAsDev: () => void;
   logout: () => void;
   clearError: () => void;
   setUser: (user: User) => void;
@@ -81,6 +100,12 @@ export const useAuthStore = create<AuthState>()(
           set({ error: message, isLoading: false });
           return false;
         }
+      },
+
+      // Dev login (bypass backend for testing)
+      loginAsDev: () => {
+        localStorage.setItem("auth_token", "dev-token");
+        set({ user: DEV_MOCK_USER, token: "dev-token", error: null });
       },
 
       // Logout action
