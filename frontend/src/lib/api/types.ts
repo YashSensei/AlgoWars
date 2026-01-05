@@ -172,14 +172,49 @@ export interface Submission {
   judgedAt?: string;
 }
 
-// Leaderboard entry
+// Leaderboard entry (from GET /users/leaderboard)
 export interface LeaderboardEntry {
   rank: number;
-  user: {
+  userId: string;
+  username: string;
+  rating: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winStreak: number;
+  maxStreak: number;
+}
+
+// Leaderboard response
+export interface LeaderboardResponse {
+  users: LeaderboardEntry[];
+  limit: number;
+  offset: number;
+}
+
+// Match history entry (from GET /users/me/matches)
+export interface MatchHistoryEntry {
+  matchId: string;
+  problem: {
+    id: string;
+    title: string;
+    difficulty: number;
+  } | null;
+  opponent: {
     id: string;
     username: string;
-  };
-  stats: UserStats;
+  } | null;
+  opponentRating: number | null;
+  result: PlayerResult;
+  ratingChange: number;
+  playedAt: string | null;
+}
+
+// Match history response
+export interface MatchHistoryResponse {
+  matches: MatchHistoryEntry[];
+  limit: number;
+  offset: number;
 }
 
 // Socket.IO Events

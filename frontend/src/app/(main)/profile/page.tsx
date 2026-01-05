@@ -4,33 +4,39 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { GlassPanel, Button, Icon } from "@/components/ui";
 import { useUser } from "@/stores";
-import { calculateWinRate } from "@/lib/utils";
-import { matchesApi, ApiClientError } from "@/lib/api";
-import type { Match } from "@/lib/api/types";
-
-// NOTE: Match history requires a backend endpoint that doesn't exist yet.
-// For now, we show recent matches if there's an active match, otherwise show empty state.
+import { calculateWinRate, formatRatingChange } from "@/lib/utils";
+import { usersApi, matchesApi, ApiClientError } from "@/lib/api";
+import type { Match, MatchHistoryEntry } from "@/lib/api/types";
 
 export default function ProfilePage() {
   const user = useUser();
   const stats = user?.stats;
 
-  // Match history state (limited to checking for active match)
-  const [recentMatch, setRecentMatch] = useState<Match | null>(null);
+  // Match history state
+  const [matchHistory, setMatchHistory] = useState<MatchHistoryEntry[]>([]);
+  const [activeMatch, setActiveMatch] = useState<Match | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
-  // Check for any active/recent match
+  // Load match history and check for active match
   useEffect(() => {
-    const loadRecentMatch = async () => {
+    const loadData = async () => {
       try {
-        const response = await matchesApi.getActiveMatch();
-        if (response.active && response.match) {
-          setRecentMatch(response.match);
+        // Load both in parallel
+        const [historyRes, activeRes] = await Promise.allSettled([
+          usersApi.getMatchHistory(10),
+          matchesApi.getActiveMatch(),
+        ]);
+
+        if (historyRes.status === "fulfilled") {
+          setMatchHistory(historyRes.value.matches);
+        }
+
+        if (activeRes.status === "fulfilled" && activeRes.value.active) {
+          setActiveMatch(activeRes.value.match ?? null);
         }
       } catch (err) {
-        // Silently ignore - user may not have any matches
         console.debug(
-          "No active match:",
+          "Failed to load profile data:",
           err instanceof ApiClientError ? err.message : err
         );
       } finally {
@@ -38,11 +44,28 @@ export default function ProfilePage() {
       }
     };
 
-    loadRecentMatch();
+    loadData();
   }, []);
 
   const totalMatches = (stats?.wins ?? 0) + (stats?.losses ?? 0) + (stats?.draws ?? 0);
   const winRate = calculateWinRate(stats?.wins ?? 0, totalMatches);
+
+  // Format relative time
+  const formatRelativeTime = (dateStr: string | null) => {
+    if (!dateStr) return "Unknown";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
 
   return (
     <div className="w-full max-w-[1000px] mx-auto px-4 py-8 md:px-10">
@@ -181,11 +204,34 @@ export default function ProfilePage() {
         </div>
       </GlassPanel>
 
-      {/* Match History / Active Match */}
+      {/* Active Match Banner */}
+      {activeMatch && (
+        <GlassPanel padding="p-4" className="mb-8 border border-primary/30 bg-primary/5">
+          <div className="flex items-center gap-4">
+            <div className="size-10 rounded-lg flex items-center justify-center bg-primary/20 text-primary animate-pulse">
+              <Icon name="play_circle" size={24} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-bold text-white">Active Match in Progress</div>
+              <div className="text-xs text-text-muted">
+                {activeMatch.problem.title} vs{" "}
+                {activeMatch.players.find((p) => p.user.id !== user?.id)?.user.username ?? "Opponent"}
+              </div>
+            </div>
+            <Link href={`/match/${activeMatch.id}`}>
+              <Button variant="primary" size="sm" leftIcon="play_arrow">
+                Resume
+              </Button>
+            </Link>
+          </div>
+        </GlassPanel>
+      )}
+
+      {/* Match History */}
       <GlassPanel padding="p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-sm font-bold text-white uppercase tracking-wide">
-            {recentMatch ? "Active Match" : "Match History"}
+            Match History
           </h2>
           <span className="text-xs font-japanese text-primary">対戦履歴</span>
         </div>
@@ -195,46 +241,77 @@ export default function ProfilePage() {
             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-3" />
             <p className="text-text-muted text-sm">Loading...</p>
           </div>
-        ) : recentMatch ? (
+        ) : matchHistory.length > 0 ? (
           <div className="space-y-3">
-            <div className="flex items-center gap-4 p-4 rounded-lg border border-primary/30 bg-primary/5">
-              {/* Active Icon */}
-              <div className="size-10 rounded-lg flex items-center justify-center bg-primary/20 text-primary">
-                <Icon name="play_circle" size={20} />
-              </div>
+            {matchHistory.map((match) => (
+              <div
+                key={match.matchId}
+                className={`flex items-center gap-4 p-4 rounded-lg border transition-colors hover:bg-white/5 ${
+                  match.result === "WON"
+                    ? "border-green-400/20 bg-green-400/5"
+                    : match.result === "DRAW"
+                      ? "border-yellow-400/20 bg-yellow-400/5"
+                      : "border-red-400/20 bg-red-400/5"
+                }`}
+              >
+                {/* Result Icon */}
+                <div
+                  className={`size-10 rounded-lg flex items-center justify-center ${
+                    match.result === "WON"
+                      ? "bg-green-400/20 text-green-400"
+                      : match.result === "DRAW"
+                        ? "bg-yellow-400/20 text-yellow-400"
+                        : "bg-red-400/20 text-red-400"
+                  }`}
+                >
+                  <Icon
+                    name={
+                      match.result === "WON"
+                        ? "emoji_events"
+                        : match.result === "DRAW"
+                          ? "handshake"
+                          : "close"
+                    }
+                    size={20}
+                  />
+                </div>
 
-              {/* Match Info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-white font-bold truncate">
-                    {recentMatch.problem.title}
-                  </span>
-                  <span
-                    className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded ${
-                      (recentMatch.problem.difficulty ?? 0) < 1200
-                        ? "bg-green-400/20 text-green-400"
-                        : (recentMatch.problem.difficulty ?? 0) < 1600
-                          ? "bg-yellow-400/20 text-yellow-400"
-                          : "bg-red-400/20 text-red-400"
+                {/* Match Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-white font-bold truncate">
+                      vs {match.opponent?.username ?? "Unknown"}
+                    </span>
+                    {match.opponentRating && (
+                      <span className="text-xs text-text-muted font-mono">
+                        ({match.opponentRating})
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-text-muted truncate">
+                    {match.problem?.title ?? "Unknown Problem"}
+                  </div>
+                </div>
+
+                {/* Rating Change */}
+                <div className="text-right">
+                  <div
+                    className={`text-lg font-bold font-mono ${
+                      match.ratingChange > 0
+                        ? "text-green-400"
+                        : match.ratingChange < 0
+                          ? "text-red-400"
+                          : "text-yellow-400"
                     }`}
                   >
-                    {recentMatch.problem.difficulty}
-                  </span>
-                </div>
-                <div className="text-xs text-text-muted">
-                  vs{" "}
-                  {recentMatch.players.find((p) => p.user.id !== user?.id)?.user
-                    .username ?? "Opponent"}
+                    {formatRatingChange(match.ratingChange)}
+                  </div>
+                  <div className="text-xs text-text-muted">
+                    {formatRelativeTime(match.playedAt)}
+                  </div>
                 </div>
               </div>
-
-              {/* Resume Button */}
-              <Link href={`/match/${recentMatch.id}`}>
-                <Button variant="primary" size="sm" leftIcon="play_arrow">
-                  Resume
-                </Button>
-              </Link>
-            </div>
+            ))}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center">
