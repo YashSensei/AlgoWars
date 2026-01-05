@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { GlassPanel, Button, Icon } from "@/components/ui";
 import { useUser } from "@/stores";
@@ -29,9 +29,7 @@ const mockResult = {
 };
 
 export default function ResultsPage() {
-  const params = useParams();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const user = useUser();
 
   const surrendered = searchParams.get("surrendered") === "true";

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Button, GlassPanel, Icon } from "@/components/ui";
 import { useUser } from "@/stores";
-import { formatNumber, calculateWinRate } from "@/lib/utils";
+import { calculateWinRate } from "@/lib/utils";
 
 export default function ArenaPage() {
   const user = useUser();

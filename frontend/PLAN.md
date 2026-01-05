@@ -98,10 +98,10 @@
 - [ ] User highlighting
 - [ ] Filter by time period
 
-### Phase 9: Profile Page
-- [ ] User info display
-- [ ] Stats overview (rating, W/L, streak)
-- [ ] Match history list
+### Phase 9: Profile Page ✅
+- [x] User info display
+- [x] Stats overview (rating, W/L, streak)
+- [x] Match history list
 - [ ] Settings (future)
 
 ---
@@ -211,10 +211,10 @@ frontend/
 - **Phase 6**: ✅ Complete (Match Arena)
 - **Phase 7**: ✅ Complete (Match Results)
 - **Phase 8**: ✅ Complete (Leaderboard)
-- **Phase 9**: ⏳ Pending (Profile Page)
+- **Phase 9**: ✅ Complete (Profile Page)
 
 ## Next Steps
 - Integrate Socket.IO for real-time matchmaking and match state
 - Replace textarea with Monaco Editor for syntax highlighting
 - Connect to actual backend API endpoints
-- Add Profile page (Phase 9)
+- Add Settings page

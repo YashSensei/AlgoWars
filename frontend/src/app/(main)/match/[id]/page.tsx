@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { GlassPanel, Button, Icon } from "@/components/ui";
-import { useUser } from "@/stores";
 import { formatTime } from "@/lib/utils";
 import type { Problem, Verdict, Submission } from "@/lib/api/types";
 
@@ -47,8 +46,6 @@ const MATCH_DURATION = 30 * 60; // 30 minutes in seconds
 export default function MatchPage() {
   const params = useParams();
   const router = useRouter();
-  const user = useUser();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Match state
   const [timeRemaining, setTimeRemaining] = useState(MATCH_DURATION);
@@ -58,8 +55,8 @@ export default function MatchPage() {
   const [submissions, setSubmissions] = useState<Partial<Submission>[]>([]);
 
   // Opponent state (would come from Socket.IO)
-  const [opponent, setOpponent] = useState(mockOpponent);
-  const [opponentStatus, setOpponentStatus] = useState<OpponentStatus>("coding");
+  const [opponent] = useState(mockOpponent);
+  const [opponentStatus] = useState<OpponentStatus>("coding");
 
   // Timer effect
   useEffect(() => {
@@ -325,7 +322,6 @@ export default function MatchPage() {
           {/* Code Textarea (placeholder for Monaco/CodeMirror) */}
           <div className="flex-1 relative">
             <textarea
-              ref={textareaRef}
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder="// Write your solution here..."

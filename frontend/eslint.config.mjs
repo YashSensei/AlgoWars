@@ -13,6 +13,13 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Custom rules
+  {
+    rules: {
+      // Material Symbols must be loaded via external CDN (variable icon font)
+      "@next/next/no-page-custom-font": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { BackgroundEffects } from "@/components/ui";
-import { Header, Footer } from "@/components/layout";
+import { Header } from "@/components/layout";
 import { useIsAuthenticated } from "@/stores";
 
 /**
