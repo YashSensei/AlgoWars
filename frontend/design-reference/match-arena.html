@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AlgoWars - Match Screen</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+
+
+        /* Editor Line Numbers Counter */
+        .line-numbers {
+            counter-reset: line;
+        }
+        .line-number::before {
+            counter-increment: line;
+            content: counter(line);
+            color: #665050;
+            display: inline-block;
+            width: 2rem;
+            text-align: right;
+            margin-right: 1rem;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display overflow-hidden h-screen flex flex-col selection:bg-primary/30 selection:text-white">
+<!-- Header -->
+<header class="h-16 shrink-0 border-b border-border-dark bg-background-dark px-6 flex items-center justify-between z-20 relative">
+<!-- Logo & Title -->
+<div class="flex items-center gap-3 w-64">
+<div class="size-8 text-primary flex items-center justify-center bg-primary/10 rounded-lg">
+<span class="material-symbols-outlined">code_off</span>
+</div>
+<div>
+<h1 class="font-bold text-lg leading-none tracking-tight">AlgoWars</h1>
+<p class="text-xs text-white/50 font-mono tracking-widest uppercase">Ranked Match</p>
+</div>
+</div>
+<!-- Central Timer -->
+<div class="flex-1 flex justify-center">
+<div class="flex items-center gap-2 bg-panel-dark border border-border-dark px-4 py-1.5 rounded-lg shadow-[0_0_15px_-3px_rgba(244,37,37,0.1)]">
+<span class="material-symbols-outlined text-primary text-xl">timer</span>
+<span class="text-2xl font-bold font-mono tracking-wider text-white tabular-nums">14:59</span>
+</div>
+</div>
+<!-- Right Actions -->
+<div class="flex items-center justify-end gap-4 w-64">
+<button class="group flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border-dark hover:border-primary/50 hover:bg-primary/10 transition-all">
+<span class="material-symbols-outlined text-gray-400 group-hover:text-primary text-sm">flag</span>
+<span class="text-sm font-medium text-gray-400 group-hover:text-white">Surrender</span>
+</button>
+<div class="w-px h-8 bg-border-dark mx-1"></div>
+<div class="relative">
+<div class="size-9 rounded-full bg-cove-medium bg-white/5 text-gray-300">DFS</span>
+</div>
+</div>
+<!-- Description -->
+<div class="space-y-4 text-gray-300 text-sm leading-relaxed">
+<p>
+                        Given the <code class="bg-white/10 px-1 py-0.5 rounded text-white font-mono text-xs">root</code> of a binary tree, invert the tree, and return its root.
+                    </p>
+<p>
+                        The inversion should happen in-place where possible, though returning a new tree is acceptable if memory constraints allow.
+                    </p>
+</div>
+<!-- Examples -->
+<div class="space-y-4">
+<div class="space-y-2">
+<p class="text-sm font-bold text-white">Example 1:</p>
+<div class="bg-panel-dark border border-border-dark rounded-lg p-3 space-y-2">
+<div class="flex items-center justify-center p-4 bg-black/20 rounded border border-white/5 mb-2">
+<!-- Abstract visualization of a tree -->
+<div class="flex gap-4">
+<div class="flex flex-col items-center gap-1">
+<div class="size-6 rounded-full bg-border-dark flex items-center justify-center text-xs">4</div>
+<div class="flex gap-2">
+<div class="size-6 rounded-full bg-primary/20 flex items-center justify-center text-xs">2</div>
+<div class="size-6 rounded-full bg-primary/20 flex items-center justify-center text-xs">7</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-gray-600 self-center">arrow_right_alt</span>
+<div class="flex flex-col items-center gap-1">
+<div class="size-6 rounded-full bg-border-dark flex items-center justify-center text-xs">4</div>
+<div class="flex gap-2">
+<div class="size-6 rounded-full bg-primary/20 flex items-center justify-center text-xs">7</div>
+<div class="size-6 rounded-full bg-primary/20 flex items-center justify-center text-xs">2</div>
+</div>
+</div>
+</div>
+</div>
+<div class="font-mono text-xs">
+<span class="text-ditor -->
+<section class="flex-1 flex flex-col min-w-0 bg-editor-bg relative">
+<!-- Editor Toolbar -->
+<div class="h-10 flex items-center justify-between px-4 border-b border-border-dark bg-panel-dark">
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-2 px-2 py-1 rounded bg-background-dark border border-border-dark cursor-pointer hover:border-gray-600 transition-colors">
+<span class="text-xs text-primary font-bold">Python 3</span>
+<span class="material-symbols-outlined text-sm text-gray-400">expand_more</span>
+</div>
+<span class="w-px h-4 bg-border-dark mx-1"></span>
+<button class="p-1 hover:bg-white/5 rounded text-gray-400 hover:text-white">
+<span class="material-symbols-outlined text-sm">settings</span>
+</button>
+<button class="p-1 hover:bg-white/5 rounded text-gray-400 hover:text-white">
+<span class="material-symbols-outlined text-sm">history</span>
+</button>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-xs text-gray-500">Saved 2m ago</span>
+</div>
+</div>
+<!-- Editor Content -->
+<div class="flex-1 overflow-y-auto font-mono text-sm leading-6 p-4 relative" id="code-editor">
+<!-- Line Numbers Container (simulated) -->
+<div class="absolute left-0 top-4 bottom-0 w-12 text-right pr-3 text-gray-600 select-none bg-editor-bg z-10">
+<div class="leading-6">1</div>
+<div class="leading-6">2</div>
+<div class="leading-6">3</div>
+<div class="leading-6">4</div>
+<div class="leading-6">5</div>
+<div class="leading-6">6</div>
+<div class="leading-6">7</div>
+<div class="leading-6">8</div>
+<div class="leading-6">9</div>
+<div class="leading-6">10</div>
+<div class="leading-6">11</div>
+</div>
+<!-- Code text (simulated syntax highlighting) -->
+<div class="pl-12 text-gray-300">
+<pre class="m-0"><span class="text-purple-400">class</span> <span class="text-yellow-200">Solution</span>:
+    <span class="text-purple-400">def</span> <span class="text-blue-400">invertTree</span>(self, root: Optional[TreeNode])x items-center gap-2">
+<span class="material-symbols-outlined text-lg">cloud_upload</span>
+                        Submit
+                    </button>
+</div>
+</div>
+</section>
+<!-- Right Panel: Opponent & Feed -->
+<aside class="w-[320px] shrink-0 flex flex-col border-l border-border-dark bg-background-dark">
+<!-- Opponent Card -->
+<div class="p-6 border-b border-border-dark bg-panel-dark">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-xs font-bold uppercase tracking-widest text-gray-500">Opponent</h3>
+<div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-500/10 border border-yellow-500/20">
+<span class="size-1.5 bg-yellow-500 rounded-full animate-pulse"></span>
+<span class="text-[10px] font-bold text-yellow-500 uppercase">Coding...</span>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative">
+<div class="size-14 rounded-lg bg-cover bg-center ring-2 ring-border-dark" data-alt="Cyberpunk ninja avatar" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCmRquNTkBwEkVq4w6MwMbl832v44z6R5_08lkQxDiJVGGOmjC2RSmJ2AyLgIV5C8cZ5NAAvyWLSnuJx151DXBOV7HudGl6Kj3KSpZrxiuHlKBspPBJmKaqlduKDo6A5rqgmcC_VKmsDqzTu3prq3uJt3ubmWLGgla5JxqCLS5Y4Yk-h0jrOwK8if6u9LDFzzMx2tyhn7aiYV8Q-GnUjeYy1lZsi1qXS5UDissaZlWUc-0lyCNH5UBx45Q99OuoT6wBw8Ki5N9XI0E');"></div>
+<div class="absolute -bottom-2 -right-2 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded border border-gray-700">Lvl 42</div>
+</div>
+<div>
+<p class="font-bold text-lg text-white">CyberNinja</p>
+<p class="text-sm text-primary font-mono">1450 ELO</p>
+</div>
+</div>
+<!-- Match Stats -->
+<div class="grid grid-cols-2 gap-2 mt-6">
+<div class="bg-background-dark p-2 rounded border border-border-dark text-center">
+<p class="text-[10px] text-gray-500 uppercase">Win Rate</p>
+<p class="text-sm font-bold text-white">64%</p>
+</div>
+<div class="bg-background-dark p-2 rounded border border-border-dark text-center">
+<p class="text-[10px] text-gray-500 uppercase">Streak</p>
+<p class="text-sm font-bold text-primary">3W</p>
+</div>
+</div>
+</div>
+<!-- Activity Feed -->
+<div class="flex-1 flex flex-col overflow-hidden relative">
+<div class="px-6 py-4 border-b border-border-dark bg-background-dark/50 backdrop-blur/div>
+<!-- Event Item: Opponent -->
+<div class="relative flex gap-4 opacity-75">
+<div class="size-8 shrink-0 rounded-full bg-gray-800 border border-gray-700 text-gray-400 flex items-center justify-center z-10 ring-4 ring-background-dark">
+<span class="material-symbols-outlined text-sm">bug_report</span>
+</div>
+<div class="flex flex-col gap-1 pt-1">
+<p class="text-xs text-gray-500 font-mono">2 mins ago</p>
+<p class="text-sm text-gray-300"><span class="font-bold text-white">CyberNinja</span> hit a Runtime Error</p>
+</div>
+</div>
+<!-- Event Item: System -->
+<div class="relative flex gap-4 opacity-50">
+<div class="size-8 shrink-0 rounded-full bg-blue-900/30 border border-blue-500/30 text-blue-400 flex items-center justify-center z-10 ring-4 ring-background-dark">
+<span class="material-symbols-outlined text-sm">swords</span>
+</div>
+<div class="flex flex-col gap-1 pt-1">
+<p class="text-xs text-gray-500 font-mono">5 mins ago</p>
+<p class="text-sm text-gray-300">Match Started</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Quick Chat / Emotes (Optional but adds gamification) -->
+<div class="p-4 border-t border-border-dark bg-panel-dark">
+<div class="flex justify-between gap-2">
+<button class="flex-1 bg-background-dark hover:bg-white/5 border border-border-dark rounded py-2 text-xl hover:scale-105 transition-transform" title="Good Luck">🍀</button>
+<button class="flex-1 bg-background-dark hover:bg-white/5 border border-border-dark rounded py-2 text-xl hover:scale-105 transition-transform" title="Thinking">🤔</button>
+<button class="flex-1 bg-background-dark hover:bg-white/5 border border-border-dark rounded py-2 text-xl hover:scale-105 transition-transform" title="Surprised">😱</button>
+<button class="flex-1 bg-background-dark hover:bg-white/5 border border-border-dark rounded py-2 text-xl hover:scale-105 transition-transform" title="Well Played">🔥</button>
+</div>
+</div>
+</aside>
+</main>
+</body></html>

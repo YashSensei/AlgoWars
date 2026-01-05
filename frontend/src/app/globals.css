@@ -1,0 +1,253 @@
+@import "tailwindcss";
+
+/* ============================================
+   ALGOWARS DESIGN SYSTEM
+   Based on login-signup.html reference
+   ============================================ */
+
+/* Tailwind v4 Theme Configuration */
+@theme inline {
+  /* Colors - Strict palette from design */
+  --color-primary: #ff3344;
+  --color-primary-hover: #d62839;
+  --color-secondary: #4f46e5;
+  --color-bg-dark: #0a0a0c;
+  --color-card-dark: #131316;
+  --color-input-bg: #0f0f12;
+  --color-border-dark: #27272a;
+  --color-text-muted: #9ca3af;
+  --color-accent-gold: #fbbf24;
+  --color-surface: #141118;
+  --color-surface-highlight: #1e1924;
+
+  /* Fonts */
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-japanese: "Noto Sans JP", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+/* Force dark mode - NO light mode */
+:root {
+  color-scheme: dark;
+  --background: #0a0a0c;
+  --foreground: #ededed;
+}
+
+/* Base Styles */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================
+   GLASS PANEL - Core card component
+   ============================================ */
+.glass-panel {
+  background: rgba(19, 19, 22, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+/* ============================================
+   NOISE TEXTURE - Subtle grain overlay
+   ============================================ */
+.bg-noise {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.03;
+}
+
+/* ============================================
+   DIAGONAL STRIPES - Button overlay pattern
+   ============================================ */
+.bg-stripes {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 4px,
+    rgba(0, 0, 0, 0.1) 4px,
+    rgba(0, 0, 0, 0.1) 8px
+  );
+}
+
+/* ============================================
+   CYBER GRID - Background pattern
+   ============================================ */
+.cyber-grid {
+  background-image:
+    linear-gradient(rgba(127, 19, 236, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(127, 19, 236, 0.1) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ============================================
+   INPUT STYLES - Form fields with icon box
+   ============================================ */
+.input-field {
+  background: #0f0f12;
+  border: none;
+  border-bottom: 1px solid #27272a;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-field:focus {
+  outline: none;
+  border-bottom-color: #ff3344;
+  box-shadow: 0 1px 0 0 #ff3344;
+}
+
+.input-icon-box {
+  background: rgba(255, 255, 255, 0.05);
+  border-right: 1px solid #27272a;
+}
+
+/* ============================================
+   CORNER ACCENTS - Decorative panel borders
+   ============================================ */
+.corner-accent-tl {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2rem;
+  height: 2rem;
+  border-top: 2px solid rgba(255, 51, 68, 0.5);
+  border-left: 2px solid rgba(255, 51, 68, 0.5);
+}
+
+.corner-accent-br {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 2rem;
+  height: 2rem;
+  border-bottom: 2px solid rgba(255, 51, 68, 0.5);
+  border-right: 2px solid rgba(255, 51, 68, 0.5);
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+/* Scan line effect for queue/search */
+@keyframes scan {
+  0%, 100% { transform: translateY(-100%); }
+  50% { transform: translateY(100%); }
+}
+.animate-scan {
+  animation: scan 2s ease-in-out infinite;
+}
+
+/* Floating effect for decorative elements */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Slow spin for geometric shapes */
+@keyframes slow-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.animate-slow-spin {
+  animation: slow-spin 10s linear infinite;
+}
+
+/* Pulse glow for status indicators */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 5px currentColor;
+  }
+  50% {
+    opacity: 0.5;
+    box-shadow: 0 0 15px currentColor;
+  }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Text glow effect */
+.text-glow {
+  text-shadow: 0 0 40px rgba(255, 51, 68, 0.5);
+}
+
+/* Card glow for winner */
+.card-glow-winner {
+  box-shadow: 0 0 20px rgba(244, 37, 37, 0.15);
+}
+
+/* ============================================
+   SCROLLBAR STYLING
+   ============================================ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #131316;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+/* ============================================
+   SELECTION STYLING
+   ============================================ */
+::selection {
+  background: #ff3344;
+  color: white;
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+/* Japanese decorative text */
+.font-japanese {
+  font-family: "Noto Sans JP", sans-serif;
+}
+
+/* Monospace for code/stats */
+.font-mono {
+  font-family: "JetBrains Mono", monospace;
+}
+
+/* Label styling from design */
+.label-style {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #9ca3af;
+}
+
+/* Mask gradient for fading edges */
+.mask-image-gradient {
+  mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+}
+
+/* Seigaiha pattern (Japanese wave) */
+.bg-seigaiha {
+  background-image:
+    radial-gradient(circle at 50% 100%, #1f1f22 10%, transparent 11%),
+    radial-gradient(circle at 50% 100%, #1f1f22 10%, transparent 11%);
+  background-size: 40px 20px;
+  background-position: 0 0, 20px 10px;
+  opacity: 0.4;
+}
