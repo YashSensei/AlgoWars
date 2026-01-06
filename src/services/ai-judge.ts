@@ -148,9 +148,11 @@ async function callAI(prompt: string, signal: AbortSignal): Promise<string | nul
 // Handle errors and return appropriate result
 function handleError(err: unknown): JudgeResult {
   if (err instanceof Error && err.name === "AbortError") {
+    logger.error("AI-Judge", "Request timed out");
     return { verdict: "WRONG_ANSWER", confidence: 0, feedback: "Judge timeout" };
   }
   const message = err instanceof Error ? err.message : "Unknown error";
+  logger.error("AI-Judge", "API error", { error: message });
   return { verdict: "WRONG_ANSWER", confidence: 0, feedback: `Judge error: ${message}` };
 }
 
@@ -163,11 +165,15 @@ export async function judgeCode(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), env.AI_TIMEOUT_MS);
 
+  logger.debug("AI-Judge", "Starting judgment", { language, codeLength: code.length });
+
   try {
     const content = await callAI(buildPrompt(problemStatement, code, language), controller.signal);
     if (!content) {
+      logger.error("AI-Judge", "Empty response from AI");
       return { verdict: "WRONG_ANSWER", confidence: 0, feedback: "No response from judge" };
     }
+    logger.debug("AI-Judge", "Got AI response", { preview: content.slice(0, 100) });
     return parseResponse(content);
   } catch (err) {
     return handleError(err);

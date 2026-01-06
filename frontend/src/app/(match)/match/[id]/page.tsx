@@ -162,11 +162,21 @@ export default function MatchPage() {
       const response = await submissionsApi.submit({ matchId, code, language });
       setSubmissions((prev) => [{ id: response.submissionId, verdict: response.verdict }, ...prev]);
       setCurrentVerdict(response.verdict);
+
+      const confidence = response.confidence ?? 0;
+      const confidenceStr = confidence > 0 ? ` (${confidence}% confidence)` : " (judge error)";
+
       if (response.verdict === "ACCEPTED") {
-        addLog("ACCEPTED! You solved it!", "success");
+        addLog(`ACCEPTED!${confidenceStr}`, "success");
       } else {
-        addLog(`${response.verdict.replace(/_/g, " ")}`, "error");
+        addLog(`${response.verdict.replace(/_/g, " ")}${confidenceStr}`, "error");
       }
+
+      // Show feedback if it was a judge error
+      if (response.feedback && confidence === 0) {
+        addLog(`Reason: ${response.feedback}`, "warning");
+      }
+
       if (response.matchEnded) {
         router.push(`/results/${matchId}?winner=${response.winnerId}`);
       } else {
