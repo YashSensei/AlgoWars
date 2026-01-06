@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Button,
@@ -45,11 +45,17 @@ export default function MatchPage() {
   const [opponentStatus, setOpponentStatus] = useState<OpponentStatus>("coding");
   const [opponentSubmissions, setOpponentSubmissions] = useState(0);
   const [logs, setLogs] = useState<{ time: string; message: string; type: "info" | "success" | "error" | "warning" }[]>([]);
+  const logsEndRef = useRef<HTMLDivElement>(null);
 
   const addLog = (message: string, type: "info" | "success" | "error" | "warning" = "info") => {
     const time = new Date().toLocaleTimeString();
     setLogs((prev) => [...prev, { time, message, type }]);
   };
+
+  // Auto-scroll logs to bottom when new logs arrive
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
 
   // Load match data
   useEffect(() => {
@@ -372,7 +378,7 @@ export default function MatchPage() {
                   </div>
 
                   {/* Live Logs */}
-                  <div className="flex-1 overflow-y-auto p-3">
+                  <div className="flex-1 min-h-0 overflow-y-auto p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <Icon name="terminal" size={14} className="text-text-muted" />
                       <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Live Logs</span>
@@ -383,11 +389,12 @@ export default function MatchPage() {
                       ) : (
                         logs.map((log, i) => (
                           <div key={i} className={`flex gap-2 ${getLogStyle(log.type)}`}>
-                            <span className="text-text-muted/50">[{log.time}]</span>
+                            <span className="text-text-muted/50 shrink-0">[{log.time}]</span>
                             <span>{log.message}</span>
                           </div>
                         ))
                       )}
+                      <div ref={logsEndRef} />
                     </div>
                   </div>
                 </div>
