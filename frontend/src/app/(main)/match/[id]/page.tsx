@@ -23,7 +23,6 @@ import type {
 
 type MatchState = "loading" | "active" | "submitting" | "ended" | "error";
 type OpponentStatus = "coding" | "submitted" | "accepted" | "disconnected";
-type RightPanelTab = "code" | "submissions";
 
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: "python3", label: "Python 3" },
@@ -50,9 +49,6 @@ export default function MatchPage() {
   // Editor state
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState<Language>("python3");
-
-  // Tab state
-  const [rightTab, setRightTab] = useState<RightPanelTab>("code");
 
   // Submission state
   const [submissions, setSubmissions] = useState<
@@ -281,7 +277,7 @@ export default function MatchPage() {
 
   return (
     <div className="flex-1 flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-bg-dark">
-      {/* Top Bar */}
+      {/* Top Bar - Match Info */}
       <div className="flex-shrink-0 h-12 border-b border-border-dark bg-card-dark flex items-center justify-between px-4">
         {/* Left - Problem Title */}
         <div className="flex items-center gap-3">
@@ -357,41 +353,40 @@ export default function MatchPage() {
         </div>
       </div>
 
-      {/* Main Content - 2 Panel Layout */}
-      <ResizablePanelGroup orientation="horizontal" className="flex-1">
-        {/* Left Panel - Problem Description */}
-        <ResizablePanel defaultSize={40} minSize={25} maxSize={60}>
-          <div className="h-full flex flex-col bg-card-dark/30">
-            {/* Tab Header */}
-            <div className="flex-shrink-0 h-10 border-b border-border-dark flex items-center px-4">
-              <div className="flex items-center gap-1 text-primary">
-                <Icon name="description" size={16} />
-                <span className="text-xs font-semibold uppercase">Description</span>
+      {/* Main Content - Resizable 2 Panel Layout */}
+      <div className="flex-1 min-h-0 p-2">
+        <ResizablePanelGroup orientation="horizontal" className="h-full rounded-lg overflow-hidden">
+          {/* Left Panel - Problem Description (Self-contained card) */}
+          <ResizablePanel defaultSize={40} minSize={25} maxSize={60}>
+            <div className="h-full flex flex-col bg-card-dark border border-border-dark rounded-lg overflow-hidden">
+              {/* Panel Header */}
+              <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/80 flex items-center px-4">
+                <div className="flex items-center gap-2 text-primary">
+                  <Icon name="description" size={16} />
+                  <span className="text-xs font-semibold uppercase tracking-wide">Description</span>
+                </div>
               </div>
-            </div>
 
-            {/* Problem Content */}
-            <div className="flex-1 overflow-y-auto">
-              <div className="p-5">
+              {/* Problem Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-4">
                 {/* Problem Statement */}
                 <div className="prose prose-sm prose-invert max-w-none">
-                  <div
-                    className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap"
-                    style={{ wordBreak: "break-word" }}
-                  >
+                  <div className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap break-words">
                     {match?.problem.statement ?? "Loading problem statement..."}
                   </div>
                 </div>
 
                 {/* Constraints */}
                 <div className="mt-6 pt-4 border-t border-border-dark">
-                  <h3 className="text-xs font-bold text-text-muted uppercase mb-3">Constraints</h3>
-                  <div className="flex flex-wrap gap-4 text-xs">
-                    <div className="flex items-center gap-1.5 text-white/70">
+                  <h3 className="text-xs font-bold text-text-muted uppercase mb-3 tracking-wide">
+                    Constraints
+                  </h3>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center gap-2 text-white/70">
                       <Icon name="schedule" size={14} className="text-primary" />
                       <span>Time Limit: {match?.problem.timeLimit ?? 1000}ms</span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-white/70">
+                    <div className="flex items-center gap-2 text-white/70">
                       <Icon name="memory" size={14} className="text-primary" />
                       <span>Memory Limit: {match?.problem.memoryLimit ?? 256}MB</span>
                     </div>
@@ -399,129 +394,124 @@ export default function MatchPage() {
                 </div>
               </div>
             </div>
-          </div>
-        </ResizablePanel>
+          </ResizablePanel>
 
-        <ResizableHandle withHandle />
+          <ResizableHandle withHandle />
 
-        {/* Right Panel - Code Editor & Submissions */}
-        <ResizablePanel defaultSize={60} minSize={40}>
-          <div className="h-full flex flex-col">
-            {/* Tab Header */}
-            <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/30 flex items-center justify-between px-4">
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setRightTab("code")}
-                  className={`flex items-center gap-1.5 text-xs font-semibold uppercase transition-colors ${
-                    rightTab === "code" ? "text-primary" : "text-text-muted hover:text-white"
-                  }`}
-                >
-                  <Icon name="code" size={16} />
-                  <span>Code</span>
-                </button>
-                <button
-                  onClick={() => setRightTab("submissions")}
-                  className={`flex items-center gap-1.5 text-xs font-semibold uppercase transition-colors ${
-                    rightTab === "submissions" ? "text-primary" : "text-text-muted hover:text-white"
-                  }`}
-                >
-                  <Icon name="history" size={16} />
-                  <span>Submissions ({submissions.length})</span>
-                </button>
-              </div>
-
-              {/* Language Selector */}
-              {rightTab === "code" && (
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value as Language)}
-                  className="bg-input-bg border border-border-dark rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-primary cursor-pointer"
-                >
-                  {LANGUAGES.map((lang) => (
-                    <option key={lang.value} value={lang.value}>
-                      {lang.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-
-            {/* Tab Content */}
-            {rightTab === "code" ? (
-              <div className="flex-1 flex flex-col min-h-0">
-                {/* Monaco Editor */}
-                <CodeEditor
-                  value={code}
-                  onChange={setCode}
-                  language={language}
-                  className="flex-1 min-h-0"
-                />
-
-                {/* Verdict Display */}
-                {currentVerdict && (
-                  <div
-                    className={`flex-shrink-0 px-4 py-2 text-center text-sm font-bold uppercase border-t ${getVerdictStyle(currentVerdict)}`}
-                  >
-                    {getVerdictLabel(currentVerdict)}
+          {/* Right Panel - Code Editor & Submissions (Vertical split) */}
+          <ResizablePanel defaultSize={60} minSize={40}>
+            <ResizablePanelGroup orientation="vertical" className="h-full">
+              {/* Code Editor Panel */}
+              <ResizablePanel defaultSize={70} minSize={30}>
+                <div className="h-full flex flex-col bg-card-dark border border-border-dark rounded-lg overflow-hidden">
+                  {/* Editor Header */}
+                  <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/80 flex items-center justify-between px-4">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Icon name="code" size={16} />
+                      <span className="text-xs font-semibold uppercase tracking-wide">Code</span>
+                    </div>
+                    <select
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value as Language)}
+                      className="bg-bg-dark border border-border-dark rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-primary cursor-pointer"
+                    >
+                      {LANGUAGES.map((lang) => (
+                        <option key={lang.value} value={lang.value}>
+                          {lang.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                )}
 
-                {/* Submit Bar */}
-                <div className="flex-shrink-0 h-14 border-t border-border-dark bg-card-dark flex items-center justify-between px-4">
-                  <div className="flex items-center gap-3 text-xs text-text-muted">
-                    <span>Submissions: {submissions.length}</span>
-                    {opponentSubmissions > 0 && (
-                      <>
-                        <span className="text-border-dark">|</span>
-                        <span className="text-red-400">Opponent: {opponentSubmissions}</span>
-                      </>
+                  {/* Monaco Editor */}
+                  <div className="flex-1 min-h-0">
+                    <CodeEditor
+                      value={code}
+                      onChange={setCode}
+                      language={language}
+                      className="h-full"
+                    />
+                  </div>
+
+                  {/* Verdict Display */}
+                  {currentVerdict && (
+                    <div
+                      className={`flex-shrink-0 px-4 py-2 text-center text-sm font-bold uppercase border-t ${getVerdictStyle(currentVerdict)}`}
+                    >
+                      {getVerdictLabel(currentVerdict)}
+                    </div>
+                  )}
+
+                  {/* Submit Bar */}
+                  <div className="flex-shrink-0 h-12 border-t border-border-dark bg-card-dark/80 flex items-center justify-between px-4">
+                    <div className="flex items-center gap-3 text-xs text-text-muted">
+                      <span>Submissions: {submissions.length}</span>
+                      {opponentSubmissions > 0 && (
+                        <>
+                          <span className="text-border-dark">|</span>
+                          <span className="text-red-400">Opponent: {opponentSubmissions}</span>
+                        </>
+                      )}
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      leftIcon="play_arrow"
+                      onClick={handleSubmit}
+                      disabled={!code.trim() || matchState === "submitting"}
+                    >
+                      {matchState === "submitting" ? "Judging..." : "Submit"}
+                    </Button>
+                  </div>
+                </div>
+              </ResizablePanel>
+
+              <ResizableHandle withHandle />
+
+              {/* Submissions Panel */}
+              <ResizablePanel defaultSize={30} minSize={15}>
+                <div className="h-full flex flex-col bg-card-dark border border-border-dark rounded-lg overflow-hidden">
+                  {/* Panel Header */}
+                  <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/80 flex items-center px-4">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Icon name="history" size={16} />
+                      <span className="text-xs font-semibold uppercase tracking-wide">
+                        Submissions ({submissions.length})
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Submissions List */}
+                  <div className="flex-1 overflow-y-auto p-3">
+                    {submissions.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-center">
+                        <Icon name="code_off" size={32} className="text-white/10 mb-2" />
+                        <p className="text-text-muted text-xs">No submissions yet</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {submissions.map((submission, index) => (
+                          <div
+                            key={submission.id}
+                            className={`p-2 rounded border text-xs ${getVerdictStyle(submission.verdict)}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono">#{submissions.length - index}</span>
+                              <span className="font-bold uppercase">
+                                {getVerdictLabel(submission.verdict)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                  <Button
-                    variant="primary"
-                    size="md"
-                    leftIcon="play_arrow"
-                    onClick={handleSubmit}
-                    disabled={!code.trim() || matchState === "submitting"}
-                  >
-                    {matchState === "submitting" ? "Judging..." : "Submit"}
-                  </Button>
                 </div>
-              </div>
-            ) : (
-              <div className="flex-1 overflow-y-auto p-4">
-                {submissions.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center">
-                    <Icon name="code_off" size={48} className="text-white/10 mb-3" />
-                    <p className="text-text-muted text-sm">No submissions yet</p>
-                    <p className="text-text-muted/60 text-xs mt-1">
-                      Write your solution and click Submit
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {submissions.map((submission, index) => (
-                      <div
-                        key={submission.id}
-                        className={`p-3 rounded-lg border ${getVerdictStyle(submission.verdict)}`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono text-sm">
-                            Submission #{submissions.length - index}
-                          </span>
-                          <span className="font-bold text-sm uppercase">
-                            {getVerdictLabel(submission.verdict)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
     </div>
   );
 }
