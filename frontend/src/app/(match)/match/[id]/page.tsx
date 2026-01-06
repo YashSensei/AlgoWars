@@ -212,7 +212,7 @@ export default function MatchPage() {
 
   if (matchState === "loading") {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="h-screen w-screen flex items-center justify-center bg-bg-dark">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           <p className="text-text-muted">Loading match...</p>
@@ -223,7 +223,7 @@ export default function MatchPage() {
 
   if (matchState === "error") {
     return (
-      <div className="flex-1 flex items-center justify-center">
+      <div className="h-screen w-screen flex items-center justify-center bg-bg-dark">
         <div className="flex flex-col items-center gap-4">
           <Icon name="error" size={48} className="text-red-400" />
           <p className="text-red-400">{error}</p>
@@ -234,7 +234,7 @@ export default function MatchPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-bg-dark">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-bg-dark">
       {/* Top Bar */}
       <div className="flex-shrink-0 h-12 border-b border-border-dark bg-card-dark flex items-center justify-between px-4">
         <div className="flex items-center gap-3">
