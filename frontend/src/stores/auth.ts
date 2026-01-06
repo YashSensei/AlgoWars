@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { authApi, ApiClientError } from "@/lib/api";
+import { authApi, usersApi, ApiClientError } from "@/lib/api";
 import type { User } from "@/lib/api";
 
 // Mock user for development (when backend is not running)
@@ -35,6 +35,7 @@ interface AuthState {
   logout: () => void;
   clearError: () => void;
   setUser: (user: User) => void;
+  refreshUser: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -119,6 +120,17 @@ export const useAuthStore = create<AuthState>()(
 
       // Update user (for profile updates)
       setUser: (user: User) => set({ user }),
+
+      // Refresh user data from server (updates stats after match)
+      refreshUser: async () => {
+        try {
+          const user = await usersApi.getMe();
+          set({ user });
+        } catch (err) {
+          // Silently fail - user might be logged out
+          console.debug("Failed to refresh user:", err instanceof ApiClientError ? err.message : err);
+        }
+      },
     }),
     {
       name: "algowars-auth",

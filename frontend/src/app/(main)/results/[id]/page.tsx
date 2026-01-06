@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { GlassPanel, Button, Icon } from "@/components/ui";
-import { useUser } from "@/stores";
+import { useUser, useAuthStore } from "@/stores";
 import { formatRatingChange } from "@/lib/utils";
 import { matchesApi, ApiClientError } from "@/lib/api";
 import type { Match } from "@/lib/api/types";
@@ -13,6 +13,7 @@ export default function ResultsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const user = useUser();
+  const refreshUser = useAuthStore((state) => state.refreshUser);
   const matchId = params.id as string;
 
   // Query params from match page
@@ -25,12 +26,14 @@ export default function ResultsPage() {
   const [showAnimation, setShowAnimation] = useState(false);
   const [animatedRating, setAnimatedRating] = useState(0);
 
-  // Load match data
+  // Load match data and refresh user stats
   useEffect(() => {
     const loadMatch = async () => {
       try {
         const matchData = await matchesApi.getMatch(matchId);
         setMatch(matchData);
+        // Refresh user stats after match ends (updates rating in store)
+        await refreshUser();
       } catch (err) {
         console.error("Failed to load match:", err instanceof ApiClientError ? err.message : err);
       } finally {
@@ -39,7 +42,7 @@ export default function ResultsPage() {
     };
 
     loadMatch();
-  }, [matchId]);
+  }, [matchId, refreshUser]);
 
   // Calculate result
   const myPlayer = match?.players.find((p) => p.user.id === user?.id);
