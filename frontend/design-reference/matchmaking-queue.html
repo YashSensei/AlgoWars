@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AlgoWars Matchmaking</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;di </div>
+<!-- Navbar -->
+<header class="relative z-10 flex items-center justify-between whitespace-nowrap border-b border-solid border-b-[#2b2839] px-6 py-4 lg:px-10 bg-[#121118]/80 backdrop-blur-md">
+<div class="flex items-center gap-4 text-white">
+<div class="flex items-center justify-center size-8 rounded bg-primary/20 text-primary">
+<span class="material-symbols-outlined">code</span>
+</div>
+<h2 class="text-white text-xl font-bold leading-tight tracking-tight">AlgoWars</h2>
+</div>
+<div class="hidden md:flex flex-1 justify-end gap-8 items-center">
+<div class="flex items-center gap-8">
+<a class="text-white/70 hover:text-white text-sm font-medium transition-colors" href="#">Arena</a>
+<a class="text-white/70 hover:text-white text-sm font-medium transition-colors" href="#">Leaderboard</a>
+<a class="text-white/70 hover:text-white text-sm font-medium transition-colors" href="#">Profile</a>
+</div>
+<button class="flex items-center justify-center rounded-lg size-10 bg-[#2b2839] hover:bg-primary/20 text-white transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="bg-center bg-no-repeat bg-cover rounded-full size-10 border border-[#2b2839]" data-alt="User profile picture showing a geometric avatar" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuD8zd_eWzlN_BsjG0hlbH8jnNQTqVfGMi_EJXRlzsHBMCoGIxQxXbcby0_TioIDfOqWSwR54M9I7MZKEEjBRgIMHuFtH0ibybo4KiyBkVcHDhvE6hZb7Yn8jrtSSiY80gGB0I_b2svgE3nNSoZAOdNIO559bj2hNkc89qEw9ln6U9-AnpGqNVkPhJcGEHGEcOgBQXkQq2RNp3plKU9N377F-M_r0QH2EAa4vm-ciIwSb4yNwCH5qIHJLtWWzzPqaOcWiaIfR9MNCng");'></div>
+</div>
+<div class="md:hidden text-white">
+<span class="material-symbols-outlined">menu</span>
+</div>
+</header>
+<!-- Main Content -->
+<main class="relative z-10 flex flex-col grow items-center justify-center p-4 md:p-8">
+<!-- Status Heading -->
+<div class="flex flex-col items-center mb-12 text-center gap-2">
+<h1 class="text-3xl md:text-5xl font-black tracking-tight text-white mb-2">Searching for Opponent</h1>
+<div class="flex items-center gap-2 text-[#a19db9] text-base md:text-lg anno font-bold text-white tabular-nums tracking-widest">00:45</div>
+<div class="text-[#a19db9] text-sm">Estimated time: 01:20</div>
+</div>
+</div>
+<!-- Opponent Placeholder (Right) -->
+<div class="flex justify-center lg:justify-start">
+<div class="w-full max-w-sm bg-[#1a1726]/40 border border-dashed border-[#3f3b54] rounded-xl p-6 flex flex-col gap-6 items-center justify-center min-h-[400px] relative overflow-hidden">
+<!-- Scan line animation -->
+<div class="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent h-[50%] animate-[scan_3s_ease-in-out_infinite] pointer-events-none"></div>
+<style>
+                        @keyframes scan {
+                            0% { transform: translateY(-100%); }
+                            100% { transform: translateY(200%); }
+                        }
+                    </style>
+<div class="size-28 rounded-xl bg-[#121118] border border-[#2b2839] flex items-center justify-center animate-pulse">
+<span class="material-symbols-outlined text-4xl text-[#3f3b54]">question_mark</span>
+</div>
+<div class="flex flex-col items-center gap-2 w-full">
+<div class="h-6 w-32 bg-[#2b2839] rounded animate-pulse"></div>
+<div class="h-4 w-20 bg-[#2b2839]/50 rounded animate-pulse"></div>
+</div>
+<div class="w-full grid grid-cols-2 gap-3 mt-4 opacity-50">
+<div class="h-16 bg-[#121118] rounded-lg border border-[#2b2839] flex items-center justify-center">
+<div class="h-4 w-8 bg-[#2b2839] rounded"></div>
+</div>
+<div class="h-16 bg-[#121118] rounded-lg border border-[#2b2839] flex items-center justify-center">
+<div class="h-4 w-8 bg-[#2b2839] rounded"></div>
+</div>
+</div>
+<div class="absolute bottom-6 text-[#6e6a85] text-sm font-mono animate-pulse">
+                        Waiting for match...
+                    </div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer Action -->
+<footer class="relative z-10 w-full p-6 flex justify-center pb-10">
+<button class="group flex items-center gap-2 px-8 py-3 rounded-full border border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/60 hover:text-red-300 transition-all duration-200">
+<span class="material-symbols-outlined group-hover:rotate-90 transition-transform duration-300">close</span>
+<span class="font-bold tracking-wide text-sm uppercase">Abort Mission</span>
+</button>
+</footer>
+</body></html>
