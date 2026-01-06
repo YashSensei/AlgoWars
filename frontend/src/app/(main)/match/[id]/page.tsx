@@ -2,7 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { GlassPanel, Button, Icon } from "@/components/ui";
+import {
+  GlassPanel,
+  Button,
+  Icon,
+  CodeEditor,
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui";
 import { useUser } from "@/stores";
 import { formatTime } from "@/lib/utils";
 import { matchesApi, submissionsApi, ApiClientError } from "@/lib/api";
@@ -241,6 +249,28 @@ export default function MatchPage() {
     return verdict.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
+  // Format problem statement for display
+  const formatProblemStatement = (statement: string | undefined) => {
+    if (!statement) return "<p>Loading problem statement...</p>";
+
+    // Convert common patterns to styled HTML
+    const formatted = statement
+      // Preserve newlines by converting to <br> tags
+      .replace(/\n/g, "<br />")
+      // Bold section headers like "Input:", "Output:", "Example:"
+      .replace(
+        /\b(Input|Output|Example|Sample|Note|Constraints|Explanation)s?:/gi,
+        '<strong class="text-primary">$1:</strong>'
+      )
+      // Style input/output blocks (lines starting with numbers or specific patterns)
+      .replace(
+        /<br \/>([\d\s\-]+)<br \/>/g,
+        '<br /><code class="bg-white/5 px-2 py-1 rounded text-accent-gold">$1</code><br />'
+      );
+
+    return formatted;
+  };
+
   // Loading state
   if (matchState === "loading") {
     return (
@@ -269,9 +299,9 @@ export default function MatchPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-80px)]">
+    <div className="flex-1 flex flex-col h-[calc(100vh-64px)] overflow-hidden">
       {/* Top Bar - Timer & Match Info */}
-      <div className="flex-shrink-0 border-b border-border-dark bg-card-dark/50 backdrop-blur-sm px-4 py-3">
+      <div className="flex-shrink-0 border-b border-border-dark bg-card-dark/50 backdrop-blur-sm px-4 py-2">
         <div className="max-w-[1800px] mx-auto flex items-center justify-between">
           {/* Left - Problem Info */}
           <div className="flex items-center gap-4">
@@ -287,14 +317,15 @@ export default function MatchPage() {
               >
                 {match?.problem.difficulty ?? "?"}
               </span>
-              <h1 className="text-white font-bold">{match?.problem.title ?? "Loading..."}</h1>
+              <h1 className="text-white font-bold text-sm">{match?.problem.title ?? "Loading..."}</h1>
             </div>
           </div>
 
           {/* Center - Timer */}
-          <div className="flex flex-col items-center">
+          <div className="flex items-center gap-3">
+            <Icon name="schedule" size={20} className="text-text-muted" />
             <div
-              className={`text-3xl font-mono font-bold tabular-nums tracking-wider ${
+              className={`text-2xl font-mono font-bold tabular-nums tracking-wider ${
                 timeRemaining < 60
                   ? "text-red-400 animate-pulse"
                   : timeRemaining < 300
@@ -304,9 +335,6 @@ export default function MatchPage() {
             >
               {formatTime(timeRemaining)}
             </div>
-            <span className="text-[10px] text-text-muted uppercase tracking-wider">
-              Time Remaining
-            </span>
           </div>
 
           {/* Right - Actions */}
@@ -318,202 +346,204 @@ export default function MatchPage() {
         </div>
       </div>
 
-      {/* Main 3-Column Layout */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-0 overflow-hidden">
-        {/* Left Column - Problem Description */}
-        <div className="border-r border-border-dark overflow-y-auto bg-bg-dark/50">
-          <div className="p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <Icon name="description" size={20} className="text-primary" />
-              <h2 className="text-sm font-bold text-white uppercase tracking-wide">Problem</h2>
+      {/* Main 3-Panel Resizable Layout */}
+      <ResizablePanelGroup orientation="horizontal" className="flex-1">
+        {/* Left Panel - Problem Description */}
+        <ResizablePanel defaultSize={30} minSize={20} maxSize={50}>
+          <div className="h-full flex flex-col bg-bg-dark/50">
+            {/* Header */}
+            <div className="flex-shrink-0 flex items-center gap-2 px-4 py-3 border-b border-border-dark">
+              <Icon name="description" size={18} className="text-primary" />
+              <h2 className="text-xs font-bold text-white uppercase tracking-wide">Problem</h2>
             </div>
 
-            {/* Problem Statement */}
-            <div className="prose prose-invert prose-sm max-w-none">
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-4">
               <div
-                className="text-sm text-white/80 leading-relaxed"
+                className="text-sm text-white/80 leading-relaxed space-y-4 problem-statement"
                 dangerouslySetInnerHTML={{
-                  __html: match?.problem.statement ?? "Loading problem statement...",
+                  __html: formatProblemStatement(match?.problem.statement),
                 }}
               />
-            </div>
 
-            {/* Limits */}
-            <div className="flex gap-4 text-xs text-text-muted mt-6 pt-4 border-t border-border-dark">
-              <div className="flex items-center gap-1">
-                <Icon name="schedule" size={14} />
-                <span>Time: {match?.problem.timeLimit ?? 1000}ms</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Icon name="memory" size={14} />
-                <span>Memory: {match?.problem.memoryLimit ?? 256}MB</span>
+              {/* Limits */}
+              <div className="flex gap-4 text-xs text-text-muted mt-6 pt-4 border-t border-border-dark">
+                <div className="flex items-center gap-1">
+                  <Icon name="schedule" size={14} />
+                  <span>Time: {match?.problem.timeLimit ?? 1000}ms</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Icon name="memory" size={14} />
+                  <span>Memory: {match?.problem.memoryLimit ?? 256}MB</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </ResizablePanel>
 
-        {/* Center Column - Code Editor */}
-        <div className="flex flex-col border-r border-border-dark overflow-hidden bg-bg-dark">
-          {/* Editor Header */}
-          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-border-dark bg-card-dark/30">
-            <div className="flex items-center gap-3">
-              <Icon name="code" size={20} className="text-primary" />
-              <h2 className="text-sm font-bold text-white uppercase tracking-wide">Solution</h2>
+        <ResizableHandle withHandle />
+
+        {/* Center Panel - Code Editor */}
+        <ResizablePanel defaultSize={45} minSize={30}>
+          <div className="h-full flex flex-col bg-bg-dark">
+            {/* Editor Header */}
+            <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-border-dark bg-card-dark/30">
+              <div className="flex items-center gap-3">
+                <Icon name="code" size={18} className="text-primary" />
+                <h2 className="text-xs font-bold text-white uppercase tracking-wide">Solution</h2>
+              </div>
+
+              {/* Language Selector */}
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as Language)}
+                className="bg-input-bg border border-border-dark rounded px-3 py-1 text-xs text-white focus:outline-none focus:border-primary"
+              >
+                {LANGUAGES.map((lang) => (
+                  <option key={lang.value} value={lang.value}>
+                    {lang.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            {/* Language Selector */}
-            <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value as Language)}
-              className="bg-input-bg border border-border-dark rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary"
-            >
-              {LANGUAGES.map((lang) => (
-                <option key={lang.value} value={lang.value}>
-                  {lang.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Code Textarea */}
-          <div className="flex-1 relative">
-            <textarea
+            {/* Monaco Editor */}
+            <CodeEditor
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="// Write your solution here..."
-              spellCheck={false}
-              className="w-full h-full p-4 bg-transparent text-white font-mono text-sm resize-none focus:outline-none placeholder:text-white/20 leading-relaxed"
-              style={{ tabSize: 2 }}
+              onChange={setCode}
+              language={language}
+              className="flex-1 min-h-0"
             />
-          </div>
 
-          {/* Verdict Display */}
-          {currentVerdict && (
-            <div
-              className={`flex-shrink-0 px-4 py-2 text-center text-sm font-bold uppercase ${getVerdictStyle(currentVerdict)}`}
-            >
-              {getVerdictLabel(currentVerdict)}
-            </div>
-          )}
-
-          {/* Submit Bar */}
-          <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t border-border-dark bg-card-dark/30">
-            <div className="flex items-center gap-2 text-xs text-text-muted">
-              <Icon name="info" size={14} />
-              <span>Submissions: {submissions.length}</span>
-            </div>
-            <Button
-              variant="primary"
-              size="md"
-              leftIcon="send"
-              onClick={handleSubmit}
-              disabled={!code.trim() || matchState === "submitting"}
-              className="min-w-[140px]"
-            >
-              {matchState === "submitting" ? "Judging..." : "Submit"}
-            </Button>
-          </div>
-        </div>
-
-        {/* Right Column - Opponent & Submissions */}
-        <div className="overflow-y-auto bg-bg-dark/50">
-          <div className="p-6">
-            {/* Opponent Status */}
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Icon name="person" size={20} className="text-primary" />
-                <h2 className="text-sm font-bold text-white uppercase tracking-wide">Opponent</h2>
+            {/* Verdict Display */}
+            {currentVerdict && (
+              <div
+                className={`flex-shrink-0 px-4 py-2 text-center text-sm font-bold uppercase border-t ${getVerdictStyle(currentVerdict)}`}
+              >
+                {getVerdictLabel(currentVerdict)}
               </div>
+            )}
 
-              <GlassPanel padding="p-4" className="border border-border-dark">
-                <div className="flex items-center gap-4">
-                  <div className="size-12 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center justify-center">
-                    <Icon name="person" size={24} className="text-red-400" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-white font-bold">{opponent?.username ?? "Opponent"}</div>
-                  </div>
+            {/* Submit Bar - Always visible at bottom */}
+            <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-t border-border-dark bg-card-dark/50">
+              <div className="flex items-center gap-2 text-xs text-text-muted">
+                <Icon name="info" size={14} />
+                <span>Submissions: {submissions.length}</span>
+              </div>
+              <Button
+                variant="primary"
+                size="md"
+                leftIcon="send"
+                onClick={handleSubmit}
+                disabled={!code.trim() || matchState === "submitting"}
+                className="min-w-[140px]"
+              >
+                {matchState === "submitting" ? "Judging..." : "Submit"}
+              </Button>
+            </div>
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle />
+
+        {/* Right Panel - Opponent & Submissions */}
+        <ResizablePanel defaultSize={25} minSize={15} maxSize={35}>
+          <div className="h-full flex flex-col bg-bg-dark/50 overflow-y-auto">
+            <div className="p-4 space-y-6">
+              {/* Opponent Status */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Icon name="person" size={18} className="text-primary" />
+                  <h2 className="text-xs font-bold text-white uppercase tracking-wide">Opponent</h2>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-white/5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-text-muted uppercase tracking-wider">Status</span>
-                    <div
-                      className={`flex items-center gap-2 text-sm font-bold ${
-                        opponentStatus === "coding"
-                          ? "text-blue-400"
-                          : opponentStatus === "accepted"
-                            ? "text-green-400"
-                            : opponentStatus === "disconnected"
-                              ? "text-gray-400"
-                              : "text-yellow-400"
-                      }`}
-                    >
-                      <span
-                        className={`size-2 rounded-full animate-pulse ${
+                <GlassPanel padding="p-3" className="border border-border-dark">
+                  <div className="flex items-center gap-3">
+                    <div className="size-10 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+                      <Icon name="person" size={20} className="text-red-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-white font-bold text-sm truncate">
+                        {opponent?.username ?? "Opponent"}
+                      </div>
+                      <div
+                        className={`flex items-center gap-1.5 text-xs ${
                           opponentStatus === "coding"
-                            ? "bg-blue-400"
+                            ? "text-blue-400"
                             : opponentStatus === "accepted"
-                              ? "bg-green-400"
+                              ? "text-green-400"
                               : opponentStatus === "disconnected"
-                                ? "bg-gray-400"
-                                : "bg-yellow-400"
+                                ? "text-gray-400"
+                                : "text-yellow-400"
                         }`}
-                      />
-                      {opponentStatus === "coding"
-                        ? "Coding..."
-                        : opponentStatus === "accepted"
-                          ? "Solved!"
-                          : opponentStatus === "disconnected"
-                            ? "Disconnected"
-                            : "Judging..."}
+                      >
+                        <span
+                          className={`size-1.5 rounded-full animate-pulse ${
+                            opponentStatus === "coding"
+                              ? "bg-blue-400"
+                              : opponentStatus === "accepted"
+                                ? "bg-green-400"
+                                : opponentStatus === "disconnected"
+                                  ? "bg-gray-400"
+                                  : "bg-yellow-400"
+                          }`}
+                        />
+                        {opponentStatus === "coding"
+                          ? "Coding..."
+                          : opponentStatus === "accepted"
+                            ? "Solved!"
+                            : opponentStatus === "disconnected"
+                              ? "Disconnected"
+                              : "Judging..."}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-xs text-text-muted uppercase tracking-wider">
+
+                  <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+                    <span className="text-[10px] text-text-muted uppercase tracking-wider">
                       Submissions
                     </span>
                     <span className="text-sm text-white font-mono">{opponentSubmissions}</span>
                   </div>
-                </div>
-              </GlassPanel>
-            </div>
-
-            {/* Your Submissions */}
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Icon name="history" size={20} className="text-primary" />
-                <h2 className="text-sm font-bold text-white uppercase tracking-wide">
-                  Your Submissions
-                </h2>
+                </GlassPanel>
               </div>
 
-              {submissions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Icon name="code_off" size={32} className="text-white/10 mb-3" />
-                  <p className="text-text-muted text-sm">No submissions yet</p>
+              {/* Your Submissions */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Icon name="history" size={18} className="text-primary" />
+                  <h2 className="text-xs font-bold text-white uppercase tracking-wide">
+                    Your Submissions
+                  </h2>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {submissions.map((submission, index) => (
-                    <div
-                      key={submission.id}
-                      className={`p-3 rounded border ${getVerdictStyle(submission.verdict)}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono">#{submissions.length - index}</span>
-                        <span className="text-xs font-bold uppercase">
-                          {getVerdictLabel(submission.verdict)}
-                        </span>
+
+                {submissions.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                    <Icon name="code_off" size={28} className="text-white/10 mb-2" />
+                    <p className="text-text-muted text-xs">No submissions yet</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {submissions.map((submission, index) => (
+                      <div
+                        key={submission.id}
+                        className={`p-2.5 rounded border text-xs ${getVerdictStyle(submission.verdict)}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono">#{submissions.length - index}</span>
+                          <span className="font-bold uppercase">
+                            {getVerdictLabel(submission.verdict)}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
