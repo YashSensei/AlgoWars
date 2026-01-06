@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { getRequestListener } from "@hono/node-server";
 import { app } from "./app";
 import { env } from "./lib/env";
+import { matchmaking } from "./services/matchmaking";
 import { setupSocketIO } from "./socket";
 
 // Create HTTP server with Hono request listener
@@ -9,6 +10,12 @@ const server = createServer(getRequestListener(app.fetch));
 
 // Setup Socket.IO on the same server
 setupSocketIO(server);
+
+// Periodic cleanup of stale queue entries (every 30 seconds)
+const QUEUE_CLEANUP_INTERVAL_MS = 30000;
+setInterval(() => {
+  matchmaking.cleanupStale();
+}, QUEUE_CLEANUP_INTERVAL_MS);
 
 // Start server
 server.listen(env.PORT, () => {
