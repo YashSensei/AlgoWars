@@ -38,88 +38,54 @@ export default function MatchPage() {
   const user = useUser();
   const matchId = params.id as string;
 
-  // Match state
   const [matchState, setMatchState] = useState<MatchState>("loading");
   const [match, setMatch] = useState<Match | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  // Timer
   const [timeRemaining, setTimeRemaining] = useState(0);
-
-  // Editor state
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState<Language>("python3");
-
-  // Submission state
-  const [submissions, setSubmissions] = useState<
-    { id: string; verdict: string; time?: number }[]
-  >([]);
+  const [submissions, setSubmissions] = useState<{ id: string; verdict: string }[]>([]);
   const [currentVerdict, setCurrentVerdict] = useState<string | null>(null);
-
-  // Opponent state
   const [opponent, setOpponent] = useState<{ id: string; username: string } | null>(null);
   const [opponentStatus, setOpponentStatus] = useState<OpponentStatus>("coding");
   const [opponentSubmissions, setOpponentSubmissions] = useState(0);
 
-  // Load match data on mount
+  // Load match data
   useEffect(() => {
     let mounted = true;
-
     const loadMatch = async () => {
       try {
         const matchData = await matchesApi.getMatch(matchId);
-
         if (!mounted) return;
-
         setMatch(matchData);
-
-        // Find opponent
         const opponentPlayer = matchData.players.find((p) => p.user.id !== user?.id);
-        if (opponentPlayer) {
-          setOpponent(opponentPlayer.user);
-        }
-
-        // Calculate time remaining
+        if (opponentPlayer) setOpponent(opponentPlayer.user);
         if (matchData.startedAt) {
-          const startTime = new Date(matchData.startedAt).getTime();
-          const endTime = startTime + matchData.duration * 1000;
-          const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
-          setTimeRemaining(remaining);
+          const endTime = new Date(matchData.startedAt).getTime() + matchData.duration * 1000;
+          setTimeRemaining(Math.max(0, Math.floor((endTime - Date.now()) / 1000)));
         } else {
           setTimeRemaining(matchData.duration);
         }
-
-        // Start match if needed
         if (matchData.status === "WAITING" || matchData.status === "STARTING") {
           await matchesApi.startMatch(matchId);
         }
-
         setMatchState("active");
       } catch (err) {
         if (!mounted) return;
-        const message = err instanceof ApiClientError ? err.message : "Failed to load match";
-        setError(message);
+        setError(err instanceof ApiClientError ? err.message : "Failed to load match");
         setMatchState("error");
       }
     };
-
     loadMatch();
-
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [matchId, user?.id]);
 
-  // Setup socket listeners when active
+  // Socket listeners
   useEffect(() => {
     if (matchState !== "active") return;
-
     const socket = getSocket();
-
-    // Join match room
     socket.emit("match:join", { matchId });
 
-    // Opponent submission
     const handleSubmission = (data: MatchSubmissionEvent) => {
       if (data.userId !== user?.id) {
         setOpponentSubmissions((prev) => prev + 1);
@@ -131,22 +97,12 @@ export default function MatchPage() {
         }
       }
     };
-
-    // Match ended
     const handleEnd = (data: MatchEndEvent) => {
       setMatchState("ended");
       router.push(`/results/${matchId}?winner=${data.winnerId}&reason=${data.reason}`);
     };
-
-    // Opponent disconnected
-    const handleDisconnect = () => {
-      setOpponentStatus("disconnected");
-    };
-
-    // Opponent reconnected
-    const handleReconnect = () => {
-      setOpponentStatus("coding");
-    };
+    const handleDisconnect = () => setOpponentStatus("disconnected");
+    const handleReconnect = () => setOpponentStatus("coding");
 
     socket.on("match:submission", handleSubmission);
     socket.on("match:end", handleEnd);
@@ -165,7 +121,6 @@ export default function MatchPage() {
   // Timer countdown
   useEffect(() => {
     if (matchState !== "active" || timeRemaining <= 0) return;
-
     const interval = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
@@ -175,49 +130,30 @@ export default function MatchPage() {
         return prev - 1;
       });
     }, 1000);
-
     return () => clearInterval(interval);
   }, [matchState, timeRemaining, matchId, router]);
 
-  // Handle code submission
   const handleSubmit = async () => {
     if (!code.trim() || matchState === "submitting") return;
-
     setMatchState("submitting");
     setCurrentVerdict(null);
-
     try {
-      const response = await submissionsApi.submit({
-        matchId,
-        code,
-        language,
-      });
-
-      const newSubmission = {
-        id: response.submissionId,
-        verdict: response.verdict,
-      };
-      setSubmissions((prev) => [newSubmission, ...prev]);
+      const response = await submissionsApi.submit({ matchId, code, language });
+      setSubmissions((prev) => [{ id: response.submissionId, verdict: response.verdict }, ...prev]);
       setCurrentVerdict(response.verdict);
-
       if (response.matchEnded) {
         router.push(`/results/${matchId}?winner=${response.winnerId}`);
       } else {
         setMatchState("active");
       }
     } catch (err) {
-      const message = err instanceof ApiClientError ? err.message : "Submission failed";
-      setError(message);
+      setError(err instanceof ApiClientError ? err.message : "Submission failed");
       setMatchState("active");
     }
   };
 
-  // Handle surrender
   const handleSurrender = async () => {
-    if (!confirm("Are you sure you want to surrender? This will count as a loss.")) {
-      return;
-    }
-
+    if (!confirm("Are you sure you want to surrender? This will count as a loss.")) return;
     try {
       await matchesApi.forfeitMatch(matchId);
       router.push(`/results/${matchId}?reason=forfeit`);
@@ -226,29 +162,17 @@ export default function MatchPage() {
     }
   };
 
-  // Get verdict styling
   const getVerdictStyle = (verdict: string) => {
-    switch (verdict) {
-      case "ACCEPTED":
-        return "text-green-400 bg-green-400/10 border-green-400/30";
-      case "WRONG_ANSWER":
-        return "text-red-400 bg-red-400/10 border-red-400/30";
-      case "TIME_LIMIT":
-        return "text-yellow-400 bg-yellow-400/10 border-yellow-400/30";
-      case "RUNTIME_ERROR":
-        return "text-orange-400 bg-orange-400/10 border-orange-400/30";
-      case "COMPILE_ERROR":
-        return "text-purple-400 bg-purple-400/10 border-purple-400/30";
-      default:
-        return "text-text-muted bg-white/5 border-white/10";
-    }
+    const styles: Record<string, string> = {
+      ACCEPTED: "text-green-400 bg-green-400/10 border-green-400/30",
+      WRONG_ANSWER: "text-red-400 bg-red-400/10 border-red-400/30",
+      TIME_LIMIT: "text-yellow-400 bg-yellow-400/10 border-yellow-400/30",
+      RUNTIME_ERROR: "text-orange-400 bg-orange-400/10 border-orange-400/30",
+      COMPILE_ERROR: "text-purple-400 bg-purple-400/10 border-purple-400/30",
+    };
+    return styles[verdict] || "text-text-muted bg-white/5 border-white/10";
   };
 
-  const getVerdictLabel = (verdict: string) => {
-    return verdict.replace(/_/g, " ");
-  };
-
-  // Loading state
   if (matchState === "loading") {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -260,16 +184,13 @@ export default function MatchPage() {
     );
   }
 
-  // Error state
   if (matchState === "error") {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
           <Icon name="error" size={48} className="text-red-400" />
           <p className="text-red-400">{error}</p>
-          <Button variant="secondary" onClick={() => router.push("/arena")}>
-            Back to Arena
-          </Button>
+          <Button variant="secondary" onClick={() => router.push("/arena")}>Back to Arena</Button>
         </div>
       </div>
     );
@@ -277,116 +198,72 @@ export default function MatchPage() {
 
   return (
     <div className="flex-1 flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-bg-dark">
-      {/* Top Bar - Match Info */}
+      {/* Top Bar */}
       <div className="flex-shrink-0 h-12 border-b border-border-dark bg-card-dark flex items-center justify-between px-4">
-        {/* Left - Problem Title */}
         <div className="flex items-center gap-3">
-          <span
-            className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-              (match?.problem.difficulty ?? 0) < 1200
-                ? "bg-green-500/20 text-green-400"
-                : (match?.problem.difficulty ?? 0) < 1600
-                  ? "bg-yellow-500/20 text-yellow-400"
-                  : "bg-red-500/20 text-red-400"
-            }`}
-          >
+          <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${
+            (match?.problem.difficulty ?? 0) < 1200 ? "bg-green-500/20 text-green-400" :
+            (match?.problem.difficulty ?? 0) < 1600 ? "bg-yellow-500/20 text-yellow-400" :
+            "bg-red-500/20 text-red-400"
+          }`}>
             {match?.problem.difficulty ?? "?"}
           </span>
-          <h1 className="text-white font-semibold text-sm">
-            {match?.problem.title ?? "Loading..."}
-          </h1>
+          <h1 className="text-white font-semibold text-sm">{match?.problem.title ?? "Loading..."}</h1>
         </div>
-
-        {/* Center - Timer */}
         <div className="flex items-center gap-2">
           <Icon name="schedule" size={18} className="text-text-muted" />
-          <span
-            className={`text-xl font-mono font-bold tabular-nums ${
-              timeRemaining < 60
-                ? "text-red-400 animate-pulse"
-                : timeRemaining < 300
-                  ? "text-yellow-400"
-                  : "text-white"
-            }`}
-          >
+          <span className={`text-xl font-mono font-bold tabular-nums ${
+            timeRemaining < 60 ? "text-red-400 animate-pulse" :
+            timeRemaining < 300 ? "text-yellow-400" : "text-white"
+          }`}>
             {formatTime(timeRemaining)}
           </span>
         </div>
-
-        {/* Right - Opponent & Surrender */}
         <div className="flex items-center gap-4">
-          {/* Opponent Status */}
           <div className="flex items-center gap-2">
             <div className="size-7 rounded bg-red-500/10 flex items-center justify-center">
               <Icon name="person" size={16} className="text-red-400" />
             </div>
             <div className="text-xs">
               <div className="text-white font-medium">{opponent?.username ?? "Opponent"}</div>
-              <div
-                className={`flex items-center gap-1 ${
-                  opponentStatus === "coding"
-                    ? "text-blue-400"
-                    : opponentStatus === "accepted"
-                      ? "text-green-400"
-                      : opponentStatus === "disconnected"
-                        ? "text-gray-400"
-                        : "text-yellow-400"
-                }`}
-              >
+              <div className={`flex items-center gap-1 ${
+                opponentStatus === "coding" ? "text-blue-400" :
+                opponentStatus === "accepted" ? "text-green-400" :
+                opponentStatus === "disconnected" ? "text-gray-400" : "text-yellow-400"
+              }`}>
                 <span className="size-1.5 rounded-full bg-current animate-pulse" />
-                <span>
-                  {opponentStatus === "coding"
-                    ? "Coding"
-                    : opponentStatus === "accepted"
-                      ? "Solved!"
-                      : opponentStatus === "disconnected"
-                        ? "Offline"
-                        : "Judging"}
-                </span>
+                <span>{opponentStatus === "coding" ? "Coding" : opponentStatus === "accepted" ? "Solved!" : opponentStatus === "disconnected" ? "Offline" : "Judging"}</span>
               </div>
             </div>
           </div>
-
-          <Button variant="danger" size="sm" leftIcon="flag" onClick={handleSurrender}>
-            Surrender
-          </Button>
+          <Button variant="danger" size="sm" leftIcon="flag" onClick={handleSurrender}>Surrender</Button>
         </div>
       </div>
 
-      {/* Main Content - Resizable 2 Panel Layout */}
-      <div className="flex-1 min-h-0 p-2">
-        <ResizablePanelGroup orientation="horizontal" className="h-full rounded-lg overflow-hidden">
-          {/* Left Panel - Problem Description (Self-contained card) */}
+      {/* Main Content */}
+      <div className="flex-1 min-h-0">
+        <ResizablePanelGroup orientation="horizontal" className="h-full">
+          {/* Left - Problem */}
           <ResizablePanel defaultSize={40} minSize={25} maxSize={60}>
-            <div className="h-full flex flex-col bg-card-dark border border-border-dark rounded-lg overflow-hidden">
-              {/* Panel Header */}
-              <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/80 flex items-center px-4">
+            <div className="h-full flex flex-col border-r border-border-dark">
+              <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/50 flex items-center px-4">
                 <div className="flex items-center gap-2 text-primary">
                   <Icon name="description" size={16} />
                   <span className="text-xs font-semibold uppercase tracking-wide">Description</span>
                 </div>
               </div>
-
-              {/* Problem Content - Scrollable */}
               <div className="flex-1 overflow-y-auto p-4">
-                {/* Problem Statement */}
-                <div className="prose prose-sm prose-invert max-w-none">
-                  <div className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap break-words">
-                    {match?.problem.statement ?? "Loading problem statement..."}
-                  </div>
+                <div className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">
+                  {match?.problem.statement ?? "Loading problem statement..."}
                 </div>
-
-                {/* Constraints */}
                 <div className="mt-6 pt-4 border-t border-border-dark">
-                  <h3 className="text-xs font-bold text-text-muted uppercase mb-3 tracking-wide">
-                    Constraints
-                  </h3>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex items-center gap-2 text-white/70">
+                  <h3 className="text-xs font-bold text-text-muted uppercase mb-3 tracking-wide">Constraints</h3>
+                  <div className="space-y-2 text-xs text-white/70">
+                    <div className="flex items-center gap-2">
                       <Icon name="schedule" size={14} className="text-primary" />
                       <span>Time Limit: {match?.problem.timeLimit ?? 1000}ms</span>
                     </div>
-                    <div className="flex items-center gap-2 text-white/70">
+                    <div className="flex items-center gap-2">
                       <Icon name="memory" size={14} className="text-primary" />
                       <span>Memory Limit: {match?.problem.memoryLimit ?? 256}MB</span>
                     </div>
@@ -396,16 +273,15 @@ export default function MatchPage() {
             </div>
           </ResizablePanel>
 
-          <ResizableHandle withHandle />
+          <ResizableHandle withHandle orientation="horizontal" />
 
-          {/* Right Panel - Code Editor & Submissions (Vertical split) */}
+          {/* Right - Code + Submissions */}
           <ResizablePanel defaultSize={60} minSize={40}>
             <ResizablePanelGroup orientation="vertical" className="h-full">
-              {/* Code Editor Panel */}
+              {/* Code Editor */}
               <ResizablePanel defaultSize={70} minSize={30}>
-                <div className="h-full flex flex-col bg-card-dark border border-border-dark rounded-lg overflow-hidden">
-                  {/* Editor Header */}
-                  <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/80 flex items-center justify-between px-4">
+                <div className="h-full flex flex-col">
+                  <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/50 flex items-center justify-between px-4">
                     <div className="flex items-center gap-2 text-primary">
                       <Icon name="code" size={16} />
                       <span className="text-xs font-semibold uppercase tracking-wide">Code</span>
@@ -416,34 +292,19 @@ export default function MatchPage() {
                       className="bg-bg-dark border border-border-dark rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-primary cursor-pointer"
                     >
                       {LANGUAGES.map((lang) => (
-                        <option key={lang.value} value={lang.value}>
-                          {lang.label}
-                        </option>
+                        <option key={lang.value} value={lang.value}>{lang.label}</option>
                       ))}
                     </select>
                   </div>
-
-                  {/* Monaco Editor */}
                   <div className="flex-1 min-h-0">
-                    <CodeEditor
-                      value={code}
-                      onChange={setCode}
-                      language={language}
-                      className="h-full"
-                    />
+                    <CodeEditor value={code} onChange={setCode} language={language} className="h-full" />
                   </div>
-
-                  {/* Verdict Display */}
                   {currentVerdict && (
-                    <div
-                      className={`flex-shrink-0 px-4 py-2 text-center text-sm font-bold uppercase border-t ${getVerdictStyle(currentVerdict)}`}
-                    >
-                      {getVerdictLabel(currentVerdict)}
+                    <div className={`flex-shrink-0 px-4 py-2 text-center text-sm font-bold uppercase border-t ${getVerdictStyle(currentVerdict)}`}>
+                      {currentVerdict.replace(/_/g, " ")}
                     </div>
                   )}
-
-                  {/* Submit Bar */}
-                  <div className="flex-shrink-0 h-12 border-t border-border-dark bg-card-dark/80 flex items-center justify-between px-4">
+                  <div className="flex-shrink-0 h-12 border-t border-border-dark bg-card-dark/50 flex items-center justify-between px-4">
                     <div className="flex items-center gap-3 text-xs text-text-muted">
                       <span>Submissions: {submissions.length}</span>
                       {opponentSubmissions > 0 && (
@@ -466,22 +327,17 @@ export default function MatchPage() {
                 </div>
               </ResizablePanel>
 
-              <ResizableHandle withHandle />
+              <ResizableHandle withHandle orientation="vertical" />
 
-              {/* Submissions Panel */}
+              {/* Submissions */}
               <ResizablePanel defaultSize={30} minSize={15}>
-                <div className="h-full flex flex-col bg-card-dark border border-border-dark rounded-lg overflow-hidden">
-                  {/* Panel Header */}
-                  <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/80 flex items-center px-4">
+                <div className="h-full flex flex-col border-t border-border-dark">
+                  <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/50 flex items-center px-4">
                     <div className="flex items-center gap-2 text-primary">
                       <Icon name="history" size={16} />
-                      <span className="text-xs font-semibold uppercase tracking-wide">
-                        Submissions ({submissions.length})
-                      </span>
+                      <span className="text-xs font-semibold uppercase tracking-wide">Submissions ({submissions.length})</span>
                     </div>
                   </div>
-
-                  {/* Submissions List */}
                   <div className="flex-1 overflow-y-auto p-3">
                     {submissions.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-full text-center">
@@ -490,16 +346,11 @@ export default function MatchPage() {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {submissions.map((submission, index) => (
-                          <div
-                            key={submission.id}
-                            className={`p-2 rounded border text-xs ${getVerdictStyle(submission.verdict)}`}
-                          >
+                        {submissions.map((sub, i) => (
+                          <div key={sub.id} className={`p-2 rounded border text-xs ${getVerdictStyle(sub.verdict)}`}>
                             <div className="flex items-center justify-between">
-                              <span className="font-mono">#{submissions.length - index}</span>
-                              <span className="font-bold uppercase">
-                                {getVerdictLabel(submission.verdict)}
-                              </span>
+                              <span className="font-mono">#{submissions.length - i}</span>
+                              <span className="font-bold uppercase">{sub.verdict.replace(/_/g, " ")}</span>
                             </div>
                           </div>
                         ))}
