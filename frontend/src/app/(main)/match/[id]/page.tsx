@@ -14,12 +14,7 @@ import { useUser } from "@/stores";
 import { formatTime } from "@/lib/utils";
 import { matchesApi, submissionsApi, ApiClientError } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
-import type {
-  Match,
-  Language,
-  MatchSubmissionEvent,
-  MatchEndEvent,
-} from "@/lib/api/types";
+import type { Match, Language, MatchSubmissionEvent, MatchEndEvent } from "@/lib/api/types";
 
 type MatchState = "loading" | "active" | "submitting" | "ended" | "error";
 type OpponentStatus = "coding" | "submitted" | "accepted" | "disconnected";
@@ -49,6 +44,12 @@ export default function MatchPage() {
   const [opponent, setOpponent] = useState<{ id: string; username: string } | null>(null);
   const [opponentStatus, setOpponentStatus] = useState<OpponentStatus>("coding");
   const [opponentSubmissions, setOpponentSubmissions] = useState(0);
+  const [logs, setLogs] = useState<{ time: string; message: string; type: "info" | "success" | "error" | "warning" }[]>([]);
+
+  const addLog = (message: string, type: "info" | "success" | "error" | "warning" = "info") => {
+    const time = new Date().toLocaleTimeString();
+    setLogs((prev) => [...prev, { time, message, type }]);
+  };
 
   // Load match data
   useEffect(() => {
@@ -59,7 +60,10 @@ export default function MatchPage() {
         if (!mounted) return;
         setMatch(matchData);
         const opponentPlayer = matchData.players.find((p) => p.user.id !== user?.id);
-        if (opponentPlayer) setOpponent(opponentPlayer.user);
+        if (opponentPlayer) {
+          setOpponent(opponentPlayer.user);
+          addLog(`Matched against ${opponentPlayer.user.username}`, "info");
+        }
         if (matchData.startedAt) {
           const endTime = new Date(matchData.startedAt).getTime() + matchData.duration * 1000;
           setTimeRemaining(Math.max(0, Math.floor((endTime - Date.now()) / 1000)));
@@ -69,6 +73,7 @@ export default function MatchPage() {
         if (matchData.status === "WAITING" || matchData.status === "STARTING") {
           await matchesApi.startMatch(matchId);
         }
+        addLog("Match started!", "success");
         setMatchState("active");
       } catch (err) {
         if (!mounted) return;
@@ -91,18 +96,27 @@ export default function MatchPage() {
         setOpponentSubmissions((prev) => prev + 1);
         if (data.verdict === "ACCEPTED") {
           setOpponentStatus("accepted");
+          addLog(`${opponent?.username} solved the problem!`, "error");
         } else {
           setOpponentStatus("submitted");
+          addLog(`${opponent?.username} submitted (${data.verdict})`, "warning");
           setTimeout(() => setOpponentStatus("coding"), 2000);
         }
       }
     };
     const handleEnd = (data: MatchEndEvent) => {
       setMatchState("ended");
+      addLog("Match ended!", "info");
       router.push(`/results/${matchId}?winner=${data.winnerId}&reason=${data.reason}`);
     };
-    const handleDisconnect = () => setOpponentStatus("disconnected");
-    const handleReconnect = () => setOpponentStatus("coding");
+    const handleDisconnect = () => {
+      setOpponentStatus("disconnected");
+      addLog(`${opponent?.username} disconnected`, "warning");
+    };
+    const handleReconnect = () => {
+      setOpponentStatus("coding");
+      addLog(`${opponent?.username} reconnected`, "info");
+    };
 
     socket.on("match:submission", handleSubmission);
     socket.on("match:end", handleEnd);
@@ -116,7 +130,7 @@ export default function MatchPage() {
       socket.off("opponent:disconnected", handleDisconnect);
       socket.off("opponent:reconnected", handleReconnect);
     };
-  }, [matchState, matchId, user?.id, router]);
+  }, [matchState, matchId, user?.id, router, opponent?.username]);
 
   // Timer countdown
   useEffect(() => {
@@ -137,23 +151,30 @@ export default function MatchPage() {
     if (!code.trim() || matchState === "submitting") return;
     setMatchState("submitting");
     setCurrentVerdict(null);
+    addLog("Submitting code...", "info");
     try {
       const response = await submissionsApi.submit({ matchId, code, language });
       setSubmissions((prev) => [{ id: response.submissionId, verdict: response.verdict }, ...prev]);
       setCurrentVerdict(response.verdict);
+      if (response.verdict === "ACCEPTED") {
+        addLog("ACCEPTED! You solved it!", "success");
+      } else {
+        addLog(`${response.verdict.replace(/_/g, " ")}`, "error");
+      }
       if (response.matchEnded) {
         router.push(`/results/${matchId}?winner=${response.winnerId}`);
       } else {
         setMatchState("active");
       }
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Submission failed");
+      addLog(err instanceof ApiClientError ? err.message : "Submission failed", "error");
       setMatchState("active");
     }
   };
 
   const handleSurrender = async () => {
     if (!confirm("Are you sure you want to surrender? This will count as a loss.")) return;
+    addLog("Surrendering...", "warning");
     try {
       await matchesApi.forfeitMatch(matchId);
       router.push(`/results/${matchId}?reason=forfeit`);
@@ -171,6 +192,16 @@ export default function MatchPage() {
       COMPILE_ERROR: "text-purple-400 bg-purple-400/10 border-purple-400/30",
     };
     return styles[verdict] || "text-text-muted bg-white/5 border-white/10";
+  };
+
+  const getLogStyle = (type: string) => {
+    const styles: Record<string, string> = {
+      info: "text-blue-400",
+      success: "text-green-400",
+      error: "text-red-400",
+      warning: "text-yellow-400",
+    };
+    return styles[type] || "text-text-muted";
   };
 
   if (matchState === "loading") {
@@ -236,20 +267,19 @@ export default function MatchPage() {
               </div>
             </div>
           </div>
-          <Button variant="danger" size="sm" leftIcon="flag" onClick={handleSurrender}>Surrender</Button>
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Main Content - 3 Panel Layout */}
       <div className="flex-1 min-h-0">
-        <ResizablePanelGroup orientation="horizontal" className="h-full">
-          {/* Left - Problem */}
-          <ResizablePanel defaultSize={40} minSize={25} maxSize={60}>
-            <div className="h-full flex flex-col border-r border-border-dark">
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          {/* Panel 1: Problem Description (Left) */}
+          <ResizablePanel defaultSize={40} minSize={25}>
+            <div className="h-full flex flex-col bg-card-dark/30 border-r border-border-dark">
               <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/50 flex items-center px-4">
                 <div className="flex items-center gap-2 text-primary">
                   <Icon name="description" size={16} />
-                  <span className="text-xs font-semibold uppercase tracking-wide">Description</span>
+                  <span className="text-xs font-semibold uppercase tracking-wide">Problem</span>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4">
@@ -261,11 +291,11 @@ export default function MatchPage() {
                   <div className="space-y-2 text-xs text-white/70">
                     <div className="flex items-center gap-2">
                       <Icon name="schedule" size={14} className="text-primary" />
-                      <span>Time Limit: {match?.problem.timeLimit ?? 1000}ms</span>
+                      <span>Time: {match?.problem.timeLimit ?? 1000}ms</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Icon name="memory" size={14} className="text-primary" />
-                      <span>Memory Limit: {match?.problem.memoryLimit ?? 256}MB</span>
+                      <span>Memory: {match?.problem.memoryLimit ?? 256}MB</span>
                     </div>
                   </div>
                 </div>
@@ -273,14 +303,14 @@ export default function MatchPage() {
             </div>
           </ResizablePanel>
 
-          <ResizableHandle withHandle orientation="horizontal" />
+          <ResizableHandle withHandle />
 
-          {/* Right - Code + Submissions */}
+          {/* Right side: Code Editor + Logs (Vertical Split) */}
           <ResizablePanel defaultSize={60} minSize={40}>
-            <ResizablePanelGroup orientation="vertical" className="h-full">
-              {/* Code Editor */}
+            <ResizablePanelGroup direction="vertical" className="h-full">
+              {/* Panel 2: Code Editor (Right Top) */}
               <ResizablePanel defaultSize={70} minSize={30}>
-                <div className="h-full flex flex-col">
+                <div className="h-full flex flex-col bg-card-dark/30">
                   <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/50 flex items-center justify-between px-4">
                     <div className="flex items-center gap-2 text-primary">
                       <Icon name="code" size={16} />
@@ -299,63 +329,66 @@ export default function MatchPage() {
                   <div className="flex-1 min-h-0">
                     <CodeEditor value={code} onChange={setCode} language={language} className="h-full" />
                   </div>
-                  {currentVerdict && (
-                    <div className={`flex-shrink-0 px-4 py-2 text-center text-sm font-bold uppercase border-t ${getVerdictStyle(currentVerdict)}`}>
-                      {currentVerdict.replace(/_/g, " ")}
-                    </div>
-                  )}
-                  <div className="flex-shrink-0 h-12 border-t border-border-dark bg-card-dark/50 flex items-center justify-between px-4">
-                    <div className="flex items-center gap-3 text-xs text-text-muted">
-                      <span>Submissions: {submissions.length}</span>
-                      {opponentSubmissions > 0 && (
-                        <>
-                          <span className="text-border-dark">|</span>
-                          <span className="text-red-400">Opponent: {opponentSubmissions}</span>
-                        </>
-                      )}
-                    </div>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      leftIcon="play_arrow"
-                      onClick={handleSubmit}
-                      disabled={!code.trim() || matchState === "submitting"}
-                    >
-                      {matchState === "submitting" ? "Judging..." : "Submit"}
-                    </Button>
-                  </div>
                 </div>
               </ResizablePanel>
 
-              <ResizableHandle withHandle orientation="vertical" />
+              <ResizableHandle withHandle />
 
-              {/* Submissions */}
-              <ResizablePanel defaultSize={30} minSize={15}>
-                <div className="h-full flex flex-col border-t border-border-dark">
-                  <div className="flex-shrink-0 h-10 border-b border-border-dark bg-card-dark/50 flex items-center px-4">
-                    <div className="flex items-center gap-2 text-primary">
-                      <Icon name="history" size={16} />
-                      <span className="text-xs font-semibold uppercase tracking-wide">Submissions ({submissions.length})</span>
+              {/* Panel 3: Actions + Live Logs (Right Bottom) */}
+              <ResizablePanel defaultSize={30} minSize={20}>
+                <div className="h-full flex flex-col bg-card-dark/30 border-t border-border-dark">
+                  {/* Action Buttons */}
+                  <div className="flex-shrink-0 h-14 border-b border-border-dark bg-card-dark/50 flex items-center justify-between px-4">
+                    <div className="flex items-center gap-3">
+                      {currentVerdict && (
+                        <span className={`px-3 py-1 rounded text-xs font-bold uppercase border ${getVerdictStyle(currentVerdict)}`}>
+                          {currentVerdict.replace(/_/g, " ")}
+                        </span>
+                      )}
+                      <span className="text-xs text-text-muted">
+                        Submissions: {submissions.length}
+                        {opponentSubmissions > 0 && <span className="text-red-400 ml-2">| Opponent: {opponentSubmissions}</span>}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        leftIcon="flag"
+                        onClick={handleSurrender}
+                      >
+                        Surrender
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        leftIcon="play_arrow"
+                        onClick={handleSubmit}
+                        disabled={!code.trim() || matchState === "submitting"}
+                      >
+                        {matchState === "submitting" ? "Judging..." : "Submit"}
+                      </Button>
                     </div>
                   </div>
+
+                  {/* Live Logs */}
                   <div className="flex-1 overflow-y-auto p-3">
-                    {submissions.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full text-center">
-                        <Icon name="code_off" size={32} className="text-white/10 mb-2" />
-                        <p className="text-text-muted text-xs">No submissions yet</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {submissions.map((sub, i) => (
-                          <div key={sub.id} className={`p-2 rounded border text-xs ${getVerdictStyle(sub.verdict)}`}>
-                            <div className="flex items-center justify-between">
-                              <span className="font-mono">#{submissions.length - i}</span>
-                              <span className="font-bold uppercase">{sub.verdict.replace(/_/g, " ")}</span>
-                            </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon name="terminal" size={14} className="text-text-muted" />
+                      <span className="text-xs font-semibold text-text-muted uppercase tracking-wide">Live Logs</span>
+                    </div>
+                    <div className="space-y-1 font-mono text-xs">
+                      {logs.length === 0 ? (
+                        <p className="text-text-muted/50">Waiting for events...</p>
+                      ) : (
+                        logs.map((log, i) => (
+                          <div key={i} className={`flex gap-2 ${getLogStyle(log.type)}`}>
+                            <span className="text-text-muted/50">[{log.time}]</span>
+                            <span>{log.message}</span>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                        ))
+                      )}
+                    </div>
                   </div>
                 </div>
               </ResizablePanel>
