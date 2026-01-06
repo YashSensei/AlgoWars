@@ -163,18 +163,10 @@ export default function MatchPage() {
       setSubmissions((prev) => [{ id: response.submissionId, verdict: response.verdict }, ...prev]);
       setCurrentVerdict(response.verdict);
 
-      const confidence = response.confidence ?? 0;
-      const confidenceStr = confidence > 0 ? ` (${confidence}% confidence)` : " (judge error)";
-
       if (response.verdict === "ACCEPTED") {
-        addLog(`ACCEPTED!${confidenceStr}`, "success");
+        addLog("ACCEPTED! You solved it!", "success");
       } else {
-        addLog(`${response.verdict.replace(/_/g, " ")}${confidenceStr}`, "error");
-      }
-
-      // Show feedback if it was a judge error
-      if (response.feedback && confidence === 0) {
-        addLog(`Reason: ${response.feedback}`, "warning");
+        addLog(`${response.verdict.replace(/_/g, " ")}`, "error");
       }
 
       if (response.matchEnded) {
