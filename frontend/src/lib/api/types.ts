@@ -117,7 +117,7 @@ export interface ActiveMatchResponse {
 
 // Queue response
 export interface QueueResponse {
-  status: "queued" | "matched";
+  status: "queued" | "matched" | "already_in_match";
   matchId?: string;
   opponentId?: string;
   opponentName?: string;

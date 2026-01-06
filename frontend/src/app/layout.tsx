@@ -45,6 +45,7 @@ export default function RootLayout({
       </head>
       <body
         className={`${spaceGrotesk.variable} ${notoSansJP.variable} ${jetbrainsMono.variable} bg-bg-dark text-foreground antialiased min-h-screen`}
+        suppressHydrationWarning
       >
         {children}
       </body>

@@ -33,12 +33,33 @@ export default function QueuePage() {
     matchIdRef.current = matchId;
   }, [matchId]);
 
-  // Join queue on mount
+  // Join queue on mount - connect socket FIRST, then join queue
   useEffect(() => {
     let mounted = true;
 
     const joinQueue = async () => {
       try {
+        // Connect socket BEFORE joining queue so we don't miss the match event
+        const socket = getSocket();
+
+        // Wait for socket to connect before joining queue
+        if (!socket.connected) {
+          await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error("Socket connection timeout")), 5000);
+            socket.once("connect", () => {
+              clearTimeout(timeout);
+              resolve();
+            });
+            socket.once("connect_error", (err) => {
+              clearTimeout(timeout);
+              reject(err);
+            });
+          });
+        }
+
+        if (!mounted) return;
+
+        // Now join queue via REST API
         const response = await matchesApi.joinQueue();
 
         if (!mounted) return;
@@ -51,6 +72,9 @@ export default function QueuePage() {
             username: response.opponentName!,
           });
           setQueueState("matched");
+        } else if (response.status === "already_in_match") {
+          // Already in an active match - redirect to it
+          router.push(`/match/${response.matchId}`);
         } else {
           // In queue, waiting for match
           setQueueState("searching");
@@ -68,16 +92,17 @@ export default function QueuePage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [router]);
 
-  // Setup socket listeners when searching
+  // Setup socket listeners for queue:matched - listen as soon as we start joining
   useEffect(() => {
-    if (queueState !== "searching") return;
+    if (queueState === "error" || queueState === "matched" || queueState === "countdown") return;
 
     const socket = getSocket();
 
     // Listen for match found
     const handleMatched = (data: QueueMatchedEvent) => {
+      console.log("[Queue] Match found via socket:", data);
       setMatchId(data.matchId);
       setOpponent(data.opponent);
       setQueueState("matched");
