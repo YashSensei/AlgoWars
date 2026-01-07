@@ -149,6 +149,41 @@ matchRoutes.post("/:id/start", async (c) => {
 });
 
 /**
+ * GET /matches/:id/submissions
+ * Get all submissions for a match (grouped by user)
+ */
+matchRoutes.get("/:id/submissions", async (c) => {
+  const { id } = c.req.param();
+  if (!isValidUUID(id)) throw Errors.BadRequest("Invalid match ID");
+  const user = c.get("user");
+
+  // Import submissions here to avoid circular dependency
+  const { submissions } = await import("../db/schema");
+
+  // Verify user is in this match
+  const player = await db.query.matchPlayers.findFirst({
+    where: and(eq(matchPlayers.matchId, id), eq(matchPlayers.userId, user.id)),
+  });
+  if (!player) throw Errors.Forbidden("You are not in this match");
+
+  // Get all submissions for this match
+  const allSubmissions = await db.query.submissions.findMany({
+    where: eq(submissions.matchId, id),
+    columns: { id: true, userId: true, verdict: true, submittedAt: true },
+    orderBy: (s, { desc }) => [desc(s.submittedAt)],
+  });
+
+  // Group by user
+  const mySubmissions = allSubmissions.filter((s) => s.userId === user.id);
+  const opponentSubmissions = allSubmissions.filter((s) => s.userId !== user.id);
+
+  return c.json({
+    my: mySubmissions.map((s) => ({ id: s.id, verdict: s.verdict })),
+    opponent: opponentSubmissions.length,
+  });
+});
+
+/**
  * POST /matches/:id/forfeit
  * Forfeit the match (opponent wins automatically)
  */

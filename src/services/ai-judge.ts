@@ -31,14 +31,21 @@ export interface JudgeResult {
 const JUDGE_SYSTEM = `You are an expert competitive programming judge. You must carefully analyze code submissions and determine if they correctly solve the given problem.
 
 IMPORTANT JUDGING RULES:
-1. Read the problem statement carefully - understand the input/output format and constraints
-2. Trace through the code logic mentally with sample inputs
-3. Check for edge cases (empty input, large numbers, boundary conditions)
-4. Only return ACCEPTED if the code correctly handles ALL cases described in the problem
-5. Return WRONG_ANSWER if there's any logical error or the algorithm is incorrect
-6. Return COMPILE_ERROR only for syntax errors that would prevent compilation
-7. Return RUNTIME_ERROR for issues like division by zero, array out of bounds
-8. When in doubt about correctness, lean toward ACCEPTED if the core algorithm is sound
+1. FIRST check if the code matches the declared language. If user says "cpp17" but submits Python code (or vice versa), return COMPILE_ERROR
+2. Read the problem statement carefully - understand the input/output format and constraints
+3. Trace through the code logic mentally with sample inputs
+4. Check for edge cases (empty input, large numbers, boundary conditions)
+5. Only return ACCEPTED if the code correctly handles ALL cases described in the problem
+6. Return WRONG_ANSWER if there's any logical error or the algorithm is incorrect
+7. Return COMPILE_ERROR for syntax errors OR language mismatch
+8. Return RUNTIME_ERROR for issues like division by zero, array out of bounds
+9. When in doubt about correctness, lean toward ACCEPTED if the core algorithm is sound
+
+LANGUAGE DETECTION:
+- C++: #include, using namespace, int main(), cout, cin, vector<>, ::
+- Python: def, import, print(), indentation-based blocks, no semicolons, no braces
+- Java: public class, public static void main, System.out, import java
+- PyPy: Same as Python
 
 Output ONLY valid JSON. No explanations.`;
 
@@ -174,16 +181,48 @@ function handleError(err: unknown): JudgeResult {
   return { verdict: "WRONG_ANSWER", confidence: 0, feedback: `Judge error: ${message}` };
 }
 
+// Quick language mismatch detection (before AI call)
+function detectLanguageMismatch(code: string, declaredLang: string): boolean {
+  const trimmed = code.trim();
+  const isCppCode = /^#include|using\s+namespace|int\s+main\s*\(|std::|cout|cin|vector</.test(
+    trimmed,
+  );
+  const isPythonCode =
+    /^(def |import |from |print\()|^\s{4}/.test(trimmed) && !trimmed.includes(";");
+  const isJavaCode = /public\s+class|public\s+static\s+void\s+main|System\.out/.test(trimmed);
+
+  const isCppLang = declaredLang.startsWith("cpp");
+  const isPythonLang = declaredLang === "python3" || declaredLang === "pypy3";
+  const isJavaLang = declaredLang === "java17";
+
+  // Mismatch if code looks like one language but declared as another
+  if (isCppCode && !isCppLang) return true;
+  if (isPythonCode && !isPythonLang) return true;
+  if (isJavaCode && !isJavaLang) return true;
+
+  return false;
+}
+
 // Main judge function
 export async function judgeCode(
   problemStatement: string,
   code: string,
   language: string,
 ): Promise<JudgeResult> {
+  logger.debug("AI-Judge", "Starting judgment", { language, codeLength: code.length });
+
+  // Fast pre-check for obvious language mismatch
+  if (detectLanguageMismatch(code, language)) {
+    logger.info("AI-Judge", "Language mismatch detected", { declared: language });
+    return {
+      verdict: "COMPILE_ERROR",
+      confidence: 100,
+      feedback: `Code doesn't match declared language (${language})`,
+    };
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), env.AI_TIMEOUT_MS);
-
-  logger.debug("AI-Judge", "Starting judgment", { language, codeLength: code.length });
 
   try {
     const content = await callAI(buildPrompt(problemStatement, code, language), controller.signal);
