@@ -34,7 +34,7 @@ IMPORTANT JUDGING RULES:
 1. FIRST check if the code matches the declared language. If user says "cpp17" but submits Python code (or vice versa), return COMPILE_ERROR
 2. Read the problem statement carefully - understand the input/output format and constraints
 3. Trace through the code logic mentally with sample inputs
-4. Check for edge cases (empty input, large numbers, boundary conditions)
+4. Check for edge cases as appropriate per question
 5. Only return ACCEPTED if the code correctly handles ALL cases described in the problem
 6. Return WRONG_ANSWER if there's any logical error or the algorithm is incorrect
 7. Return COMPILE_ERROR for syntax errors OR language mismatch

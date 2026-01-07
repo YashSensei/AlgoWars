@@ -7,6 +7,7 @@
 import type { Server as HTTPServer } from "node:http";
 import type { Socket } from "socket.io";
 import { Server } from "socket.io";
+import { getCorsOrigins } from "../lib/env";
 import { logger } from "../lib/logger";
 import { authService } from "../services/auth";
 import { matchEngine } from "../services/match-engine";
@@ -209,8 +210,13 @@ function handleConnection(socket: Socket): void {
 }
 
 export function setupSocketIO(httpServer: HTTPServer): Server {
+  const corsOrigins = getCorsOrigins();
   const io = new Server(httpServer, {
-    cors: { origin: "*", methods: ["GET", "POST"] },
+    cors: {
+      origin: corsOrigins,
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
   });
 
   ioInstance = io;

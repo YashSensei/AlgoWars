@@ -6,9 +6,19 @@ import { authService } from "../services/auth";
 export const authRoutes = new Hono();
 
 const registerSchema = z.object({
-  username: z.string().min(3).max(32),
-  email: z.email(),
-  password: z.string().min(6),
+  username: z
+    .string()
+    .min(3, "Username must be at least 3 characters")
+    .max(32, "Username must be at most 32 characters")
+    .regex(
+      /^[a-zA-Z0-9_-]+$/,
+      "Username can only contain letters, numbers, underscores, and hyphens",
+    ),
+  email: z.email("Invalid email address"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password must be at most 128 characters"),
 });
 
 const loginSchema = z.object({

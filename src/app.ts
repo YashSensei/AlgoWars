@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { cors } from "hono/cors";
 import { logger as honoLogger } from "hono/logger";
+import { getCorsOrigins } from "./lib/env";
 import { AppError } from "./lib/errors";
 import { logger } from "./lib/logger";
 import { routes } from "./routes";
@@ -10,7 +11,18 @@ export const app = new Hono();
 
 // Middleware
 app.use("*", honoLogger());
-app.use("*", cors());
+
+// CORS configuration - configurable via CORS_ORIGINS env var
+const corsOrigins = getCorsOrigins();
+app.use(
+  "*",
+  cors({
+    origin: corsOrigins === "*" ? "*" : corsOrigins,
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  }),
+);
 
 // Static files (test UI)
 app.use("/test", serveStatic({ path: "./public/test.html" }));
@@ -25,7 +37,7 @@ app.onError((err, c) => {
       path: c.req.path,
       method: c.req.method,
     });
-    return c.json({ error: err.message, code: err.code }, err.statusCode as 400);
+    return c.json({ error: err.message, code: err.code }, err.statusCode);
   }
   logger.error("HTTP", `Unhandled error: ${err.message}`, {
     path: c.req.path,

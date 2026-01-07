@@ -1,8 +1,11 @@
+// Valid HTTP status codes for Hono's ContentfulStatusCode type
+type HttpStatusCode = 400 | 401 | 403 | 404 | 409 | 500;
+
 export class AppError extends Error {
-  public statusCode: number;
+  public statusCode: HttpStatusCode;
   public code?: string;
 
-  constructor(message: string, statusCode = 500, code?: string) {
+  constructor(message: string, statusCode: HttpStatusCode = 500, code?: string) {
     super(message);
     this.name = "AppError";
     this.statusCode = statusCode;
