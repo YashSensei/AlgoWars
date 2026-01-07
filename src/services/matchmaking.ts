@@ -163,8 +163,23 @@ export const matchmaking = {
       const opponent = findMatch(player);
 
       if (opponent) {
+        // Verify opponent is still connected before matching
+        if (!socketEmit.isUserConnected(opponent.userId)) {
+          // Opponent disconnected, remove from queue and continue searching
+          queue.delete(opponent.userId);
+          socketEmit.trackQueueLeave(opponent.userId);
+          logger.warn(
+            "Matchmaking",
+            `Skipping disconnected opponent ${opponent.userId.slice(0, 8)}, adding ${userId.slice(0, 8)} to queue`,
+          );
+          queue.set(userId, player);
+          socketEmit.trackQueueJoin(userId);
+          return { status: "queued" };
+        }
+
         // Atomic: remove opponent from queue and create match
         queue.delete(opponent.userId);
+        socketEmit.trackQueueLeave(opponent.userId);
         logger.info(
           "Matchmaking",
           `Matched ${userId.slice(0, 8)} (${stats.rating}) with ${opponent.userId.slice(0, 8)} (${opponent.rating})`,
@@ -175,6 +190,7 @@ export const matchmaking = {
 
       // No opponent found, add to queue
       queue.set(userId, player);
+      socketEmit.trackQueueJoin(userId);
       logger.info("Matchmaking", `User ${userId.slice(0, 8)} (${stats.rating}) joined queue`, {
         queueSize: queue.size,
       });
@@ -189,6 +205,7 @@ export const matchmaking = {
     return queueMutex.withLock(async () => {
       const removed = queue.delete(userId);
       if (removed) {
+        socketEmit.trackQueueLeave(userId);
         logger.info("Matchmaking", `User ${userId.slice(0, 8)} left queue`, {
           queueSize: queue.size,
         });
@@ -205,5 +222,29 @@ export const matchmaking = {
   // Get queue size (for debugging)
   size(): number {
     return queue.size;
+  },
+
+  /**
+   * Clean up stale queue entries (users who disconnected)
+   * Called periodically to ensure queue hygiene
+   */
+  async cleanupStale(): Promise<number> {
+    return queueMutex.withLock(async () => {
+      let removed = 0;
+      for (const [userId] of queue) {
+        if (!socketEmit.isUserConnected(userId)) {
+          queue.delete(userId);
+          socketEmit.trackQueueLeave(userId);
+          removed++;
+          logger.info("Matchmaking", `Removed stale user ${userId.slice(0, 8)} from queue`);
+        }
+      }
+      if (removed > 0) {
+        logger.info("Matchmaking", `Cleanup removed ${removed} stale entries`, {
+          queueSize: queue.size,
+        });
+      }
+      return removed;
+    });
   },
 };

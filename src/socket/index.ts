@@ -10,6 +10,7 @@ import { Server } from "socket.io";
 import { logger } from "../lib/logger";
 import { authService } from "../services/auth";
 import { matchEngine } from "../services/match-engine";
+import { matchmaking } from "../services/matchmaking";
 
 // Disconnect timeout in milliseconds
 const DISCONNECT_TIMEOUT_MS = 10000;
@@ -56,6 +57,9 @@ const disconnectTimers = new Map<string, DisconnectTimer>();
 
 // Track socket count per user (for multi-tab handling)
 const userSocketCount = new Map<string, number>();
+
+// Track users currently in queue (for cleanup on disconnect)
+const usersInQueue = new Set<string>();
 
 // Safe emit helper - no-op if Socket.IO not initialized
 function safeEmit(room: string, event: string, data: unknown): void {
@@ -122,8 +126,18 @@ async function executeAutoForfeit(userId: string, timerData: DisconnectTimer): P
   userMatchMap.delete(userId);
 }
 
-// Handle user disconnection - start timeout for auto-forfeit
-function handleDisconnection(userId: string): void {
+// Handle user disconnection - remove from queue or start auto-forfeit timer
+async function handleDisconnection(userId: string): Promise<void> {
+  // First, remove user from matchmaking queue if they're in it
+  if (usersInQueue.has(userId)) {
+    usersInQueue.delete(userId);
+    const removed = await matchmaking.leave(userId);
+    if (removed) {
+      logger.info("Socket", `User ${userId.slice(0, 8)} removed from queue on disconnect`);
+    }
+  }
+
+  // Then handle match disconnection
   const matchState = userMatchMap.get(userId);
   if (!matchState) {
     logger.debug("Socket", `User ${userId.slice(0, 8)} disconnected (not in match)`);
@@ -248,5 +262,20 @@ export const socketEmit = {
       clearTimeout(timerData.timer);
       disconnectTimers.delete(userId);
     }
+  },
+
+  // Track user in queue (for cleanup on disconnect)
+  trackQueueJoin(userId: string) {
+    usersInQueue.add(userId);
+  },
+
+  // Remove user from queue tracking (when matched or manually left)
+  trackQueueLeave(userId: string) {
+    usersInQueue.delete(userId);
+  },
+
+  // Check if user is connected via socket
+  isUserConnected(userId: string): boolean {
+    return (userSocketCount.get(userId) ?? 0) > 0;
   },
 };

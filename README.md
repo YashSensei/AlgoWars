@@ -61,8 +61,8 @@ A real-time 1v1 competitive programming platform where users compete head-to-hea
    # Run migrations
    bun run db:migrate
 
-   # Seed problems from Codeforces
-   bun run db:seed
+   # Ingest problems from scraped Codeforces data
+   bun run db:ingest
 
    # Start development server
    bun run dev
@@ -126,7 +126,7 @@ bun run lint         # Lint with Biome
 bun run typecheck    # TypeScript check
 bun run db:generate  # Generate migrations
 bun run db:migrate   # Apply migrations
-bun run db:seed      # Seed problems
+bun run db:ingest    # Ingest problems from scraped data
 bun run db:studio    # Open Drizzle Studio
 ```
 

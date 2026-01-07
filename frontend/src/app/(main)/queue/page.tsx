@@ -115,7 +115,7 @@ export default function QueuePage() {
     };
   }, [queueState]);
 
-  // Setup socket listeners when matched
+  // Setup socket listeners when matched and auto-redirect after brief delay
   useEffect(() => {
     if (queueState !== "matched" || !matchId) return;
 
@@ -138,9 +138,17 @@ export default function QueuePage() {
     socket.on("match:countdown", handleCountdown);
     socket.on("match:start", handleStart);
 
+    // Auto-redirect to match page after 2 seconds if no countdown/start event
+    // This handles the case where both players matched but no countdown is sent
+    const autoRedirectTimer = setTimeout(() => {
+      console.log("[Queue] Auto-redirecting to match page");
+      router.push(`/match/${matchIdRef.current}`);
+    }, 2000);
+
     return () => {
       socket.off("match:countdown", handleCountdown);
       socket.off("match:start", handleStart);
+      clearTimeout(autoRedirectTimer);
     };
   }, [queueState, matchId, opponent?.id, router]);
 

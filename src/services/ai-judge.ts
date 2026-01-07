@@ -28,20 +28,38 @@ export interface JudgeResult {
   confidence: number; // 0-100
 }
 
-const JUDGE_SYSTEM = `You are a competitive programming judge API. Output ONLY JSON. No explanations. No hints. No analysis.`;
+const JUDGE_SYSTEM = `You are an expert competitive programming judge. You must carefully analyze code submissions and determine if they correctly solve the given problem.
 
-const JUDGE_PROMPT = `Judge this code submission. Do NOT reveal why it failed or give hints.
+IMPORTANT JUDGING RULES:
+1. Read the problem statement carefully - understand the input/output format and constraints
+2. Trace through the code logic mentally with sample inputs
+3. Check for edge cases (empty input, large numbers, boundary conditions)
+4. Only return ACCEPTED if the code correctly handles ALL cases described in the problem
+5. Return WRONG_ANSWER if there's any logical error or the algorithm is incorrect
+6. Return COMPILE_ERROR only for syntax errors that would prevent compilation
+7. Return RUNTIME_ERROR for issues like division by zero, array out of bounds
+8. When in doubt about correctness, lean toward ACCEPTED if the core algorithm is sound
 
-PROBLEM:
+Output ONLY valid JSON. No explanations.`;
+
+const JUDGE_PROMPT = `Analyze this code submission for the given competitive programming problem.
+
+PROBLEM STATEMENT:
 {problem}
 
-CODE ({language}):
+SUBMITTED CODE ({language}):
+\`\`\`
 {code}
+\`\`\`
 
-VERDICTS: ACCEPTED, WRONG_ANSWER, TIME_LIMIT, MEMORY_LIMIT, RUNTIME_ERROR, COMPILE_ERROR, INVALID_CODE
+Think step by step:
+1. What does the problem ask for?
+2. What algorithm does the code use?
+3. Does the code handle the input/output format correctly?
+4. Are there any logical errors?
 
-Output ONLY this JSON (no other text):
-{"verdict":"VERDICT_HERE","confidence":85}`;
+Then output ONLY this JSON (nothing else):
+{"verdict":"ACCEPTED or WRONG_ANSWER or COMPILE_ERROR or RUNTIME_ERROR","confidence":85}`;
 
 const VALID_VERDICTS: Verdict[] = [
   "ACCEPTED",
@@ -148,9 +166,11 @@ async function callAI(prompt: string, signal: AbortSignal): Promise<string | nul
 // Handle errors and return appropriate result
 function handleError(err: unknown): JudgeResult {
   if (err instanceof Error && err.name === "AbortError") {
+    logger.error("AI-Judge", "Request timed out");
     return { verdict: "WRONG_ANSWER", confidence: 0, feedback: "Judge timeout" };
   }
   const message = err instanceof Error ? err.message : "Unknown error";
+  logger.error("AI-Judge", "API error", { error: message });
   return { verdict: "WRONG_ANSWER", confidence: 0, feedback: `Judge error: ${message}` };
 }
 
@@ -163,11 +183,15 @@ export async function judgeCode(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), env.AI_TIMEOUT_MS);
 
+  logger.debug("AI-Judge", "Starting judgment", { language, codeLength: code.length });
+
   try {
     const content = await callAI(buildPrompt(problemStatement, code, language), controller.signal);
     if (!content) {
+      logger.error("AI-Judge", "Empty response from AI");
       return { verdict: "WRONG_ANSWER", confidence: 0, feedback: "No response from judge" };
     }
+    logger.debug("AI-Judge", "Got AI response", { preview: content.slice(0, 100) });
     return parseResponse(content);
   } catch (err) {
     return handleError(err);

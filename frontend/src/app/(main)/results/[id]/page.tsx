@@ -52,7 +52,7 @@ export default function ResultsPage() {
   const isDraw = myPlayer?.result === "DRAW";
   const ratingChange = myPlayer?.ratingAfter && myPlayer?.ratingBefore
     ? myPlayer.ratingAfter - myPlayer.ratingBefore
-    : isWinner ? 25 : isDraw ? 0 : -25;
+    : isWinner ? 5 : isDraw ? 0 : -5;
 
   // Animate on mount
   useEffect(() => {
