@@ -16,7 +16,7 @@ import { MutexManager } from "../lib/mutex";
 import { socketEmit } from "../socket";
 
 // Rating change constants
-const RATING_CHANGE = 5;
+const RATING_CHANGE = 25;
 
 // Per-match mutexes - ensures atomic operations per match
 const matchMutexes = new MutexManager<string>();
