@@ -144,13 +144,19 @@ export default function MatchPage() {
     const interval = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev <= 1) {
-          router.push(`/results/${matchId}?reason=timeout`);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(interval);
+  }, [matchState]);
+
+  // Handle timeout navigation separately (avoids setState during render)
+  useEffect(() => {
+    if (matchState === "active" && timeRemaining === 0) {
+      router.push(`/results/${matchId}?reason=timeout`);
+    }
   }, [matchState, timeRemaining, matchId, router]);
 
   const handleSubmit = async () => {
