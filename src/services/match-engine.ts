@@ -206,18 +206,7 @@ export const matchEngine = {
     userId: string,
     verdict: string,
   ): Promise<{ ended: boolean; winnerId?: string }> {
-    // Broadcast verdict to all players first (outside lock for speed)
-    socketEmit.matchSubmission(matchId, { userId, verdict });
-
-    if (verdict !== "ACCEPTED") {
-      logger.info("MatchEngine", `Verdict: ${verdict}`, {
-        match: matchId.slice(0, 8),
-        user: userId.slice(0, 8),
-      });
-      return { ended: false };
-    }
-
-    // ACCEPTED - try to end match with this user as winner
+    // All verdict processing inside mutex to prevent phantom broadcasts
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: State machine requires multiple checks
     return matchMutexes.withLock(matchId, async () => {
       const match = await db.query.matches.findFirst({
@@ -229,16 +218,27 @@ export const matchEngine = {
         return { ended: true }; // Match gone, treat as ended
       }
 
-      // Can only complete from ACTIVE state
+      // Only broadcast verdict if match is still active
       if (match.status !== "ACTIVE") {
         logger.debug(
           "MatchEngine",
-          `ACCEPTED ignored - match ${matchId.slice(0, 8)} not active (${match.status})`,
+          `Verdict ignored - match ${matchId.slice(0, 8)} not active (${match.status})`,
         );
         return { ended: true }; // Already ended by someone else
       }
 
-      // Perform transition to COMPLETED
+      // Broadcast verdict to all players (inside lock, after state check)
+      socketEmit.matchSubmission(matchId, { userId, verdict });
+
+      if (verdict !== "ACCEPTED") {
+        logger.info("MatchEngine", `Verdict: ${verdict}`, {
+          match: matchId.slice(0, 8),
+          user: userId.slice(0, 8),
+        });
+        return { ended: false };
+      }
+
+      // ACCEPTED - end match with this user as winner
       clearTimer(matchId);
 
       await db

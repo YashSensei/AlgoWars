@@ -49,4 +49,13 @@ export const matchesApi = {
    */
   forfeitMatch: (matchId: string) =>
     api.post<{ status: string; winnerId: string }>(`/matches/${matchId}/forfeit`),
+
+  /**
+   * Get submissions for a match (grouped by my/opponent)
+   */
+  getSubmissions: (matchId: string) =>
+    api.get<{
+      my: { id: string; verdict: string }[];
+      opponent: number;
+    }>(`/matches/${matchId}/submissions`),
 };

@@ -1,11 +1,23 @@
 import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
+import { z } from "zod/v4";
 import { matchPlayers, userStats, users } from "../db/schema";
 import { db } from "../lib/db";
 import { Errors } from "../lib/errors";
 import { authMiddleware } from "../middleware/auth";
 
 export const userRoutes = new Hono();
+
+const usernameSchema = z.object({
+  username: z
+    .string()
+    .min(3, "Username must be at least 3 characters")
+    .max(32, "Username must be at most 32 characters")
+    .regex(
+      /^[a-zA-Z0-9_-]+$/,
+      "Username can only contain letters, numbers, underscores, and hyphens",
+    ),
+});
 
 // Get current user (protected)
 userRoutes.get("/me", authMiddleware, async (c) => {
@@ -20,6 +32,42 @@ userRoutes.get("/me", authMiddleware, async (c) => {
   if (!user) throw Errors.NotFound("User");
 
   return c.json(user);
+});
+
+/**
+ * PATCH /users/me/username
+ * Set username for OAuth users who don't have one yet.
+ */
+userRoutes.patch("/me/username", authMiddleware, async (c) => {
+  const { id } = c.get("user");
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    throw Errors.BadRequest("Invalid JSON body");
+  }
+
+  const parsed = usernameSchema.safeParse(body);
+  if (!parsed.success) {
+    throw Errors.BadRequest(parsed.error.issues[0]?.message ?? "Invalid username");
+  }
+
+  // Check if username is taken
+  const existing = await db.query.users.findFirst({
+    where: eq(users.username, parsed.data.username),
+  });
+  if (existing && existing.id !== id) throw Errors.Conflict("Username already taken");
+
+  await db.update(users).set({ username: parsed.data.username }).where(eq(users.id, id));
+
+  const updated = await db.query.users.findFirst({
+    where: eq(users.id, id),
+    columns: { id: true, username: true, email: true, createdAt: true },
+    with: { stats: true },
+  });
+
+  return c.json(updated);
 });
 
 /**

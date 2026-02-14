@@ -20,9 +20,8 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, loginAsDev, isLoading, error, clearError } = useAuthStore();
+  const { login, loginWithOAuth, isLoading, error, clearError } = useAuthStore();
   const isAuthenticated = useIsAuthenticated();
-  const isDev = process.env.NODE_ENV === "development";
 
   const {
     register,
@@ -135,23 +134,6 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        {/* Dev Login Button (only in development) */}
-        {isDev && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            fullWidth
-            onClick={() => {
-              loginAsDev();
-              router.push("/arena");
-            }}
-            className="mt-4 border-dashed border-yellow-500/30 text-yellow-500 hover:bg-yellow-500/10"
-          >
-            🔧 Dev Login (Skip Auth)
-          </Button>
-        )}
-
         {/* Divider */}
         <div className="relative flex py-8 items-center justify-center">
           <div className="absolute inset-0 flex items-center">
@@ -167,6 +149,7 @@ export default function LoginPage() {
           {/* GitHub */}
           <button
             type="button"
+            onClick={() => loginWithOAuth("github")}
             className="flex items-center justify-center gap-2 bg-transparent border border-border-dark hover:border-white/30 hover:bg-white/5 text-white py-2.5 transition-all group"
           >
             <svg
@@ -184,6 +167,7 @@ export default function LoginPage() {
           {/* Google */}
           <button
             type="button"
+            onClick={() => loginWithOAuth("google")}
             className="flex items-center justify-center gap-2 bg-transparent border border-border-dark hover:border-white/30 hover:bg-white/5 text-white py-2.5 transition-all group"
           >
             <svg

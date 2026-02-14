@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
+import { useState } from "react";
 import { Button, GlassPanel, Input } from "@/components/ui";
 import { useAuthStore, useIsAuthenticated } from "@/stores";
 
@@ -17,9 +18,9 @@ const signupSchema = z
       .string()
       .min(3, "Handle must be at least 3 characters")
       .max(32, "Handle must be at most 32 characters")
-      .regex(/^[a-zA-Z0-9_]+$/, "Only letters, numbers, and underscores"),
+      .regex(/^[a-zA-Z0-9_-]+$/, "Only letters, numbers, underscores, and hyphens"),
     email: z.string().email("Invalid comms channel format"),
-    password: z.string().min(6, "Access key must be at least 6 characters"),
+    password: z.string().min(8, "Access key must be at least 8 characters"),
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -31,8 +32,9 @@ type SignupForm = z.infer<typeof signupSchema>;
 
 export default function SignupPage() {
   const router = useRouter();
-  const { register: registerUser, isLoading, error, clearError } = useAuthStore();
+  const { register: registerUser, loginWithOAuth, isLoading, error, clearError } = useAuthStore();
   const isAuthenticated = useIsAuthenticated();
+  const [verifyMessage, setVerifyMessage] = useState<string | null>(null);
 
   const {
     register,
@@ -55,9 +57,9 @@ export default function SignupPage() {
   }, [clearError]);
 
   const onSubmit = async (data: SignupForm) => {
-    const success = await registerUser(data.username, data.email, data.password);
-    if (success) {
-      router.push("/arena");
+    const message = await registerUser(data.username, data.email, data.password);
+    if (message) {
+      setVerifyMessage(message);
     }
   };
 
@@ -95,6 +97,17 @@ export default function SignupPage() {
             Sign Up
           </button>
         </div>
+
+        {/* Email verification message */}
+        {verifyMessage && (
+          <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded">
+            <p className="text-green-400 text-xs font-bold uppercase tracking-wide mb-1">Registration Complete</p>
+            <p className="text-green-300/80 text-xs">{verifyMessage}</p>
+            <Link href="/login" className="text-primary text-xs hover:underline mt-2 inline-block">
+              Go to Login
+            </Link>
+          </div>
+        )}
 
         {/* Error Message */}
         {error && (
@@ -170,6 +183,7 @@ export default function SignupPage() {
           {/* GitHub */}
           <button
             type="button"
+            onClick={() => loginWithOAuth("github")}
             className="flex items-center justify-center gap-2 bg-transparent border border-border-dark hover:border-white/30 hover:bg-white/5 text-white py-2.5 transition-all group"
           >
             <svg
@@ -187,6 +201,7 @@ export default function SignupPage() {
           {/* Google */}
           <button
             type="button"
+            onClick={() => loginWithOAuth("google")}
             className="flex items-center justify-center gap-2 bg-transparent border border-border-dark hover:border-white/30 hover:bg-white/5 text-white py-2.5 transition-all group"
           >
             <svg

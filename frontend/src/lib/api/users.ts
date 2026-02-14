@@ -31,4 +31,9 @@ export const usersApi = {
    */
   getMatchHistory: (limit = 20, offset = 0) =>
     api.get<MatchHistoryResponse>(`/users/me/matches?limit=${limit}&offset=${offset}`),
+
+  /**
+   * Set username (for OAuth users who don't have one yet)
+   */
+  setUsername: (username: string) => api.patch<User>("/users/me/username", { username }),
 };

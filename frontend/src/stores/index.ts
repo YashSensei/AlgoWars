@@ -4,4 +4,5 @@ export {
   useIsAuthenticated,
   useAuthLoading,
   useAuthError,
+  useNeedsUsername,
 } from "./auth";

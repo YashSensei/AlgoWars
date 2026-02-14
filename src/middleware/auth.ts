@@ -11,7 +11,7 @@ type UserRole = "USER" | "ADMIN";
 // Extend Hono's context to include user
 declare module "hono" {
   interface ContextVariableMap {
-    user: { id: string; username: string; email: string; role: UserRole };
+    user: { id: string; username: string | null; email: string; role: UserRole };
   }
 }
 
@@ -23,7 +23,7 @@ export async function authMiddleware(c: Context, next: Next) {
   }
 
   const token = header.slice(7);
-  const { userId } = authService.verifyToken(token);
+  const { sub: userId } = await authService.verifyToken(token);
 
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),

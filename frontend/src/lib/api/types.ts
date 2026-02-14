@@ -15,10 +15,10 @@ export interface UserStats {
   updatedAt: string;
 }
 
-// User from users table (without password)
+// User from users table
 export interface User {
   id: string;
-  username: string;
+  username: string | null; // null for OAuth users who haven't chosen one yet
   email: string;
   createdAt: string;
   stats: UserStats | null;
@@ -32,10 +32,20 @@ export interface UserProfile {
   stats: UserStats;
 }
 
-// Auth response from login/register
-export interface AuthResponse {
+// Auth response from login (Supabase session)
+export interface LoginResponse {
   user: User;
-  token: string;
+  session: {
+    access_token: string;
+    refresh_token: string;
+    expires_at?: number;
+  };
+}
+
+// Auth response from register (email verification required)
+export interface RegisterResponse {
+  user: User | null;
+  message: string;
 }
 
 // Login request body

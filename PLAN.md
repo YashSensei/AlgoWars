@@ -1,3 +1,5 @@
+next step - build better frontend and launch
+
 # 🎮 AlgoWars - 1v1 Competitive Programming Platform
 
 ## Project Overview
