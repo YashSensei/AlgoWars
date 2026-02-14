@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { getRequestListener } from "@hono/node-server";
 import { app } from "./app";
+import { startDbKeepAlive } from "./lib/db";
 import { env } from "./lib/env";
 import { logger } from "./lib/logger";
 import { matchmaking } from "./services/matchmaking";
@@ -18,6 +19,9 @@ const cleanupInterval = setInterval(() => {
   matchmaking.cleanupStale();
 }, QUEUE_CLEANUP_INTERVAL_MS);
 
+// Supabase DB keep-alive pinger (every 5 days)
+const dbPingInterval = startDbKeepAlive();
+
 // Graceful shutdown handler
 function gracefulShutdown(signal: string) {
   logger.info("Server", `${signal} received, shutting down gracefully...`);
@@ -27,8 +31,9 @@ function gracefulShutdown(signal: string) {
     logger.info("Server", "HTTP server closed");
   });
 
-  // Clear cleanup interval
+  // Clear intervals
   clearInterval(cleanupInterval);
+  clearInterval(dbPingInterval);
 
   // Close all socket connections
   io.close(() => {

@@ -1,4 +1,5 @@
 import { io, Socket } from "socket.io-client";
+import { supabase } from "@/lib/supabase/client";
 
 // Socket.IO client singleton
 let socket: Socket | null = null;
@@ -7,17 +8,19 @@ const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 /**
  * Get or create Socket.IO connection
- * Authenticates using JWT token from localStorage
+ * Authenticates using Supabase session token
  */
 export function getSocket(): Socket {
   if (socket?.connected) {
     return socket;
   }
 
-  const token = localStorage.getItem("auth_token");
-
   socket = io(SOCKET_URL, {
-    auth: { token },
+    // Read fresh token on every connection/reconnection attempt
+    auth: async (cb) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      cb({ token: session?.access_token ?? null });
+    },
     transports: ["websocket", "polling"],
     reconnection: true,
     reconnectionAttempts: 5,

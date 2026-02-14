@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod/v4";
 import { Errors } from "../lib/errors";
+import { authMiddleware } from "../middleware/auth";
 import { authService } from "../services/auth";
 
 export const authRoutes = new Hono();
@@ -26,6 +27,14 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
+const refreshSchema = z.object({
+  refresh_token: z.string(),
+});
+
+/**
+ * POST /auth/register
+ * Creates Supabase user + DB profile. Returns message to verify email.
+ */
 authRoutes.post("/register", async (c) => {
   let body: unknown;
   try {
@@ -45,6 +54,10 @@ authRoutes.post("/register", async (c) => {
   return c.json(result, 201);
 });
 
+/**
+ * POST /auth/login
+ * Signs in via Supabase. Returns user + session tokens.
+ */
 authRoutes.post("/login", async (c) => {
   let body: unknown;
   try {
@@ -62,4 +75,36 @@ authRoutes.post("/login", async (c) => {
   const result = await authService.login(email, password);
 
   return c.json(result);
+});
+
+/**
+ * POST /auth/refresh
+ * Refresh session tokens using a Supabase refresh token.
+ */
+authRoutes.post("/refresh", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    throw Errors.BadRequest("Invalid JSON body");
+  }
+
+  const parsed = refreshSchema.safeParse(body);
+  if (!parsed.success) {
+    throw Errors.BadRequest("Missing refresh_token");
+  }
+
+  const session = await authService.refreshSession(parsed.data.refresh_token);
+  return c.json(session);
+});
+
+/**
+ * POST /auth/ensure-profile
+ * For OAuth users: ensures a DB profile exists after Supabase auth.
+ * Returns the user profile (with or without username).
+ */
+authRoutes.post("/ensure-profile", authMiddleware, async (c) => {
+  const { id, email } = c.get("user");
+  const user = await authService.ensureProfile(id, email);
+  return c.json({ user });
 });

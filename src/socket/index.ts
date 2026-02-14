@@ -67,8 +67,8 @@ function safeEmit(room: string, event: string, data: unknown): void {
   ioInstance?.to(room).emit(event, data);
 }
 
-// JWT authentication middleware
-function createAuthMiddleware(socket: Socket, next: (err?: Error) => void): void {
+// JWT authentication middleware (async — verifies via JWKS)
+async function createAuthMiddleware(socket: Socket, next: (err?: Error) => void): Promise<void> {
   const token = socket.handshake.auth.token as string | undefined;
   if (!token) {
     logger.warn("Socket", `Connection rejected - no token provided`);
@@ -77,9 +77,9 @@ function createAuthMiddleware(socket: Socket, next: (err?: Error) => void): void
   }
 
   try {
-    const payload = authService.verifyToken(token);
-    socket.data = { userId: payload.userId } as SocketData;
-    logger.info("Socket", `User ${payload.userId.slice(0, 8)} authenticated`);
+    const payload = await authService.verifyToken(token);
+    socket.data = { userId: payload.sub } as SocketData;
+    logger.info("Socket", `User ${payload.sub.slice(0, 8)} authenticated`);
     next();
   } catch {
     logger.warn("Socket", `Connection rejected - invalid token`);

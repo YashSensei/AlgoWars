@@ -196,6 +196,7 @@ function mapVerdictToEnum(verdict: string): (typeof submissions.verdict.enumValu
     TIME_LIMIT: "TIME_LIMIT",
     MEMORY_LIMIT: "MEMORY_LIMIT",
     INVALID_CODE: "WRONG_ANSWER",
+    JUDGE_TIMEOUT: "JUDGE_TIMEOUT",
   };
   return mapping[verdict] ?? "PENDING";
 }

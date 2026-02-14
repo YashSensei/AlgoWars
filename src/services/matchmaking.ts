@@ -132,16 +132,6 @@ export const matchmaking = {
   async join(
     userId: string,
   ): Promise<{ status: "queued" | "matched" | "already_in_match"; matchId?: string }> {
-    // Check if already in an active match (outside lock - read-only)
-    const existingMatchId = await hasActiveMatch(userId);
-    if (existingMatchId) {
-      logger.info(
-        "Matchmaking",
-        `User ${userId.slice(0, 8)} already in match ${existingMatchId.slice(0, 8)}`,
-      );
-      return { status: "already_in_match", matchId: existingMatchId };
-    }
-
     // Get user stats (outside lock - read-only)
     const stats = await db.query.userStats.findFirst({
       where: eq(userStats.userId, userId),
@@ -151,9 +141,19 @@ export const matchmaking = {
       throw new Error("User stats not found");
     }
 
-    // All queue mutations happen inside mutex
+    // All checks and mutations happen inside mutex to prevent TOCTOU races
     return queueMutex.withLock(async () => {
-      // Check if already in queue (re-check inside lock)
+      // Check if already in an active match (inside lock to prevent double-matching)
+      const existingMatchId = await hasActiveMatch(userId);
+      if (existingMatchId) {
+        logger.info(
+          "Matchmaking",
+          `User ${userId.slice(0, 8)} already in match ${existingMatchId.slice(0, 8)}`,
+        );
+        return { status: "already_in_match", matchId: existingMatchId };
+      }
+
+      // Check if already in queue
       if (queue.has(userId)) {
         logger.debug("Matchmaking", `User ${userId.slice(0, 8)} already in queue`);
         return { status: "queued" };

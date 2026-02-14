@@ -21,10 +21,11 @@ function log(level: LogLevel, context: string, message: string, data?: unknown):
   const color = COLORS[level];
   const prefix = `${color}[${formatTimestamp()}] [${level.toUpperCase()}] [${context}]${COLORS.reset}`;
 
-  // biome-ignore lint/suspicious/noConsole: Logger's purpose is to log to console
   if (data !== undefined) {
+    // biome-ignore lint/suspicious/noConsole: Logger's purpose is to log to console
     console.log(prefix, message, typeof data === "object" ? JSON.stringify(data, null, 2) : data);
   } else {
+    // biome-ignore lint/suspicious/noConsole: Logger's purpose is to log to console
     console.log(prefix, message);
   }
 }

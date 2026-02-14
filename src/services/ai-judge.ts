@@ -174,11 +174,15 @@ async function callAI(prompt: string, signal: AbortSignal): Promise<string | nul
 function handleError(err: unknown): JudgeResult {
   if (err instanceof Error && err.name === "AbortError") {
     logger.error("AI-Judge", "Request timed out");
-    return { verdict: "WRONG_ANSWER", confidence: 0, feedback: "Judge timeout" };
+    return { verdict: "JUDGE_TIMEOUT" as Verdict, confidence: 0, feedback: "Judge timed out" };
   }
   const message = err instanceof Error ? err.message : "Unknown error";
   logger.error("AI-Judge", "API error", { error: message });
-  return { verdict: "WRONG_ANSWER", confidence: 0, feedback: `Judge error: ${message}` };
+  return {
+    verdict: "JUDGE_TIMEOUT" as Verdict,
+    confidence: 0,
+    feedback: `Judge error: ${message}`,
+  };
 }
 
 // Quick language mismatch detection (before AI call)

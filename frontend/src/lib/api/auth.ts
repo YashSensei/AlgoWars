@@ -1,25 +1,24 @@
 import api from "./client";
-import type { AuthResponse, LoginRequest, RegisterRequest, User } from "./types";
+import type { LoginRequest, LoginResponse, RegisterRequest, RegisterResponse, User } from "./types";
 
 /**
  * Auth API functions
  */
 export const authApi = {
-  /**
-   * Login with email and password
-   */
-  login: (data: LoginRequest): Promise<AuthResponse> =>
-    api.post<AuthResponse>("/auth/login", data),
+  login: (data: LoginRequest): Promise<LoginResponse> =>
+    api.post<LoginResponse>("/auth/login", data),
 
-  /**
-   * Register a new user
-   */
-  register: (data: RegisterRequest): Promise<AuthResponse> =>
-    api.post<AuthResponse>("/auth/register", data),
+  register: (data: RegisterRequest): Promise<RegisterResponse> =>
+    api.post<RegisterResponse>("/auth/register", data),
 
-  /**
-   * Get current user profile (requires auth token)
-   */
+  refresh: (refresh_token: string) =>
+    api.post<{ access_token: string; refresh_token: string; expires_at?: number }>(
+      "/auth/refresh",
+      { refresh_token },
+    ),
+
+  ensureProfile: () => api.post<{ user: User }>("/auth/ensure-profile"),
+
   me: (): Promise<User> => api.get<User>("/users/me"),
 };
 

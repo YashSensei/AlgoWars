@@ -89,18 +89,18 @@ class SubmissionQueue {
       return { status: "busy" };
     }
 
-    // Store actual submission
-    this.activeSubmissions.set(submission.userId, submission);
-    const submissionId = `ai-${Date.now()}-${submission.userId.slice(0, 8)}`;
-
-    logger.info("Submission", `Processing submission ${submissionId}`, {
-      user: submission.userId.slice(0, 8),
-      language: submission.language,
-      codeLength: submission.code.length,
-      activeCount: this.activeSubmissions.size,
-    });
-
+    // Entire post-lock section wrapped in try/finally to prevent lock leaks
     try {
+      this.activeSubmissions.set(submission.userId, submission);
+      const submissionId = `ai-${Date.now()}-${submission.userId.slice(0, 8)}`;
+
+      logger.info("Submission", `Processing submission ${submissionId}`, {
+        user: submission.userId.slice(0, 8),
+        language: submission.language,
+        codeLength: submission.code.length,
+        activeCount: this.activeSubmissions.size,
+      });
+
       // Call AI judge (can run concurrently for different users)
       const result = await judgeCode(
         submission.problemStatement,
@@ -123,8 +123,8 @@ class SubmissionQueue {
       return { status: "complete", submissionId, verdict };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
-      logger.error("Submission", `AI judge error for ${submissionId}`, { error: message });
-      return { status: "complete", submissionId, error: message };
+      logger.error("Submission", `AI judge error`, { error: message });
+      return { status: "complete", error: message };
     } finally {
       // Always release lock
       this.releaseLock(submission.userId);

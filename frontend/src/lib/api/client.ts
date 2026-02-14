@@ -1,7 +1,9 @@
 /**
  * API Client for AlgoWars backend
- * Base URL defaults to localhost:3000 for development
+ * Gets auth token from Supabase session
  */
+
+import { supabase } from "@/lib/supabase/client";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -25,13 +27,16 @@ export class ApiClientError extends Error {
  */
 async function fetchApi<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
 
-  // Get token from localStorage if available
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  // Get token from Supabase session
+  let token: string | null = null;
+  if (typeof window !== "undefined") {
+    const { data: { session } } = await supabase.auth.getSession();
+    token = session?.access_token ?? null;
+  }
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -59,9 +64,14 @@ async function fetchApi<T>(
   const data = await response.json();
 
   if (!response.ok) {
+    // Auto-logout on expired/invalid token (skip for auth endpoints)
+    if (response.status === 401 && typeof window !== "undefined" && !endpoint.startsWith("/auth/")) {
+      await supabase.auth.signOut();
+      window.location.href = "/login";
+    }
     throw new ApiClientError(
-      data.message || "Request failed",
-      response.status
+      data.error || data.message || "Request failed",
+      response.status,
     );
   }
 

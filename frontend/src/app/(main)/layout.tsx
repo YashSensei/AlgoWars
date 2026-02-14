@@ -4,11 +4,11 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { BackgroundEffects } from "@/components/ui";
 import { Header } from "@/components/layout";
-import { useIsAuthenticated } from "@/stores";
+import { useAuthStore } from "@/stores";
 
 /**
  * Layout for authenticated pages (arena, queue, match, etc.)
- * Redirects to login if not authenticated
+ * Redirects to login if not authenticated, or to choose-username if needed
  */
 export default function MainLayout({
   children,
@@ -16,22 +16,21 @@ export default function MainLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const isAuthenticated = useIsAuthenticated();
+  const user = useAuthStore((s) => s.user);
+  const initialized = useAuthStore((s) => s.initialized);
 
-  // Redirect to login if not authenticated
   useEffect(() => {
-    // Allow a brief moment for hydration before redirecting
-    const timeout = setTimeout(() => {
-      if (!isAuthenticated) {
-        router.push("/login");
-      }
-    }, 100);
+    if (!initialized) return;
 
-    return () => clearTimeout(timeout);
-  }, [isAuthenticated, router]);
+    if (!user) {
+      router.push("/login");
+    } else if (!user.username) {
+      router.push("/choose-username");
+    }
+  }, [user, initialized, router]);
 
-  // Show nothing while checking auth (prevents flash)
-  if (!isAuthenticated) {
+  // Show spinner while initializing or if not authenticated
+  if (!initialized || !user || !user.username) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-dark">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
