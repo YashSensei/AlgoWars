@@ -9,8 +9,9 @@ import { routes } from "./routes";
 
 export const app = new Hono();
 
-// Middleware
-app.use("*", honoLogger());
+// Middleware — skip logger for /health so Render's frequent probe doesn't spam logs.
+const hLogger = honoLogger();
+app.use("*", (c, next) => (c.req.path === "/health" ? next() : hLogger(c, next)));
 
 // CORS configuration - configurable via CORS_ORIGINS env var
 const corsOrigins = getCorsOrigins();

@@ -143,19 +143,20 @@ export default function MatchPage() {
     };
   }, [matchState, matchId, user?.id, router, opponent?.username]);
 
-  // Timer countdown
+  // Timer countdown — compute from real elapsed time each tick so the clock
+  // stays accurate even during "submitting" state (which previously paused the timer).
   useEffect(() => {
-    if (matchState !== "active" || timeRemaining <= 0) return;
-    const interval = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    if (!match?.startedAt) return;
+    const endTime = new Date(match.startedAt).getTime() + match.duration * 1000;
+
+    const tick = () => {
+      setTimeRemaining(Math.max(0, Math.floor((endTime - Date.now()) / 1000)));
+    };
+
+    tick();
+    const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, [matchState]);
+  }, [match?.startedAt, match?.duration]);
 
   // Handle timeout navigation separately (avoids setState during render)
   useEffect(() => {

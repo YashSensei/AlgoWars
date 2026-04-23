@@ -58,7 +58,9 @@ const dbPingInterval = startDbKeepAlive();
 // the public URL every 10 min so Render's proxy sees traffic and keeps us awake.
 // Only activates in production with RENDER_EXTERNAL_URL set — dev is unaffected.
 const SELF_URL = process.env.RENDER_EXTERNAL_URL;
-const KEEP_ALIVE_INTERVAL_MS = 10 * 60 * 1000;
+// Render puts free-tier services to sleep after 15 min of no external traffic.
+// Ping every 14 min — tight 1-min buffer, ~4 pings/hour instead of 6.
+const KEEP_ALIVE_INTERVAL_MS = 14 * 60 * 1000;
 const keepAliveInterval =
   env.NODE_ENV === "production" && SELF_URL
     ? setInterval(async () => {
