@@ -54,6 +54,23 @@ const cleanupInterval = setInterval(() => {
 // Supabase DB keep-alive pinger (every 5 days)
 const dbPingInterval = startDbKeepAlive();
 
+// Render free tier sleeps after 15 min of no external HTTP traffic. We self-ping
+// the public URL every 10 min so Render's proxy sees traffic and keeps us awake.
+// Only activates in production with RENDER_EXTERNAL_URL set — dev is unaffected.
+const SELF_URL = process.env.RENDER_EXTERNAL_URL;
+const KEEP_ALIVE_INTERVAL_MS = 10 * 60 * 1000;
+const keepAliveInterval =
+  env.NODE_ENV === "production" && SELF_URL
+    ? setInterval(async () => {
+        try {
+          const res = await fetch(`${SELF_URL}/health`);
+          logger.debug("KeepAlive", `Self-ping ${res.status}`);
+        } catch (err) {
+          logger.warn("KeepAlive", "Self-ping failed", err);
+        }
+      }, KEEP_ALIVE_INTERVAL_MS)
+    : null;
+
 // Graceful shutdown handler
 function gracefulShutdown(signal: string) {
   logger.info("Server", `${signal} received, shutting down gracefully...`);
@@ -66,6 +83,7 @@ function gracefulShutdown(signal: string) {
   // Clear intervals
   clearInterval(cleanupInterval);
   clearInterval(dbPingInterval);
+  if (keepAliveInterval) clearInterval(keepAliveInterval);
 
   // Close all socket connections
   io.close(() => {

@@ -69,6 +69,14 @@ export default function ResultsPage() {
     ? myPlayer.ratingAfter - myPlayer.ratingBefore
     : isWinner ? 5 : isDraw ? 0 : -5;
 
+  // Detect forfeit: match completed with a winner, but nobody got ACCEPTED.
+  // In that case the losing player is the one who surrendered.
+  const hasAccepted = submissions.some((s) => s.verdict === "ACCEPTED");
+  const winnerPlayer = match?.players.find((p) => p.result === "WON");
+  const loserPlayer = match?.players.find((p) => p.result === "LOST");
+  const wasForfeit = !!winnerPlayer && !hasAccepted;
+  const forfeiterName = wasForfeit ? loserPlayer?.user.username : null;
+
   // Animate on mount
   useEffect(() => {
     if (loading) return;
@@ -186,7 +194,11 @@ export default function ResultsPage() {
         </p>
 
         {/* Reason text */}
-        <p className="text-text-muted text-sm mb-8">{getReasonText()}</p>
+        <p className="text-text-muted text-sm mb-1">{getReasonText()}</p>
+        {forfeiterName && (
+          <p className="text-yellow-400/80 text-xs italic mb-8">{forfeiterName} surrendered</p>
+        )}
+        {!forfeiterName && <div className="mb-8" />}
 
         {/* Rating Change Card */}
         <GlassPanel
@@ -293,56 +305,37 @@ export default function ResultsPage() {
           </div>
         )}
 
-        {/* Submissions — winning code highlighted */}
-        {submissions.length > 0 && (
-          <div className="w-full max-w-2xl mb-8">
-            <h2 className="text-sm font-bold text-white uppercase tracking-wide mb-3 flex items-center gap-2">
-              <Icon name="code" size={18} className="text-primary" />
-              Submissions
-              <span className="text-xs font-japanese text-white/30 font-normal ml-auto">提出</span>
-            </h2>
-            <div className="space-y-3">
-              {submissions.map((sub) => {
-                const isAccepted = sub.verdict === "ACCEPTED";
-                return (
-                  <GlassPanel
-                    key={sub.id}
-                    padding="p-4"
-                    className={`border ${
-                      isAccepted
-                        ? "border-green-400/40 bg-green-400/5"
-                        : "border-white/10"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="text-sm font-bold text-white">
-                        {sub.user.username ?? "Unknown"}
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded border ${
-                          isAccepted
-                            ? "text-green-400 bg-green-400/10 border-green-400/30"
-                            : "text-red-400 bg-red-400/10 border-red-400/30"
-                        }`}
-                      >
-                        {sub.verdict.replace(/_/g, " ")}
-                      </span>
-                      <span className="text-[10px] text-text-muted uppercase tracking-widest">
-                        {sub.language}
-                      </span>
-                      {isAccepted && (
-                        <Icon name="emoji_events" size={16} className="text-green-400 ml-auto" />
-                      )}
-                    </div>
-                    <pre className="text-xs font-mono text-white/80 bg-black/40 p-3 rounded border border-white/5 overflow-x-auto max-h-80 overflow-y-auto">
-                      <code>{sub.code}</code>
-                    </pre>
-                  </GlassPanel>
-                );
-              })}
+        {/* Winning solution — only the ACCEPTED submission is shown */}
+        {(() => {
+          const winningSubmission = submissions.find((s) => s.verdict === "ACCEPTED");
+          if (!winningSubmission) return null;
+          return (
+            <div className="w-full max-w-2xl mb-8">
+              <h2 className="text-sm font-bold text-white uppercase tracking-wide mb-3 flex items-center gap-2">
+                <Icon name="code" size={18} className="text-primary" />
+                Winning Solution
+                <span className="text-xs font-japanese text-white/30 font-normal ml-auto">優勝解</span>
+              </h2>
+              <GlassPanel padding="p-4" className="border border-green-400/40 bg-green-400/5">
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-sm font-bold text-white">
+                    {winningSubmission.user.username ?? "Unknown"}
+                  </span>
+                  <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded border text-green-400 bg-green-400/10 border-green-400/30">
+                    {winningSubmission.verdict.replace(/_/g, " ")}
+                  </span>
+                  <span className="text-[10px] text-text-muted uppercase tracking-widest">
+                    {winningSubmission.language}
+                  </span>
+                  <Icon name="emoji_events" size={16} className="text-green-400 ml-auto" />
+                </div>
+                <pre className="text-xs font-mono text-white/80 bg-black/40 p-3 rounded border border-white/5 overflow-x-auto max-h-80 overflow-y-auto">
+                  <code>{winningSubmission.code}</code>
+                </pre>
+              </GlassPanel>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Problem Info */}
         {match?.problem && (

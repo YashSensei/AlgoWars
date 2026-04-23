@@ -205,6 +205,8 @@ export interface MatchHistoryEntry {
   result: PlayerResult;
   ratingChange: number;
   playedAt: string | null;
+  endReason: "solved" | "forfeit";
+  forfeiter: { id: string; username: string | null } | null;
 }
 
 // Match history response

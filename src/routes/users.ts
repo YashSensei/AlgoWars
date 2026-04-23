@@ -1,7 +1,7 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod/v4";
-import { matchPlayers, userStats, users } from "../db/schema";
+import { matchPlayers, submissions, userStats, users } from "../db/schema";
 import { db } from "../lib/db";
 import { Errors } from "../lib/errors";
 import { authMiddleware } from "../middleware/auth";
@@ -133,25 +133,64 @@ userRoutes.get("/me/matches", authMiddleware, async (c) => {
     },
   });
 
-  // Filter to only completed matches and transform
-  const matches = history
-    .filter((mp) => mp.match.status === "COMPLETED")
-    .map((mp) => {
-      const opponent = mp.match.players.find((p) => p.user.id !== id);
-      const me = mp.match.players.find((p) => p.user.id === id);
-      return {
-        matchId: mp.match.id,
-        problem: mp.match.problem,
-        opponent: opponent?.user ?? null,
-        opponentRating: opponent?.ratingBefore ?? null,
-        result: me?.result ?? "PENDING",
-        ratingChange: me?.ratingAfter && me?.ratingBefore ? me.ratingAfter - me.ratingBefore : 0,
-        playedAt: mp.match.endedAt ?? mp.match.startedAt,
-      };
-    });
+  // Filter to only completed matches
+  const completed = history.filter((mp) => mp.match.status === "COMPLETED");
+
+  // Batch-fetch which of these matches had at least one ACCEPTED submission.
+  // Absence of ACCEPTED in a COMPLETED match means someone forfeited.
+  const matchIds = completed.map((mp) => mp.match.id);
+  const acceptedRows =
+    matchIds.length === 0
+      ? []
+      : await db.query.submissions.findMany({
+          where: and(inArray(submissions.matchId, matchIds), eq(submissions.verdict, "ACCEPTED")),
+          columns: { matchId: true },
+        });
+  const acceptedMatchIds = new Set(acceptedRows.map((r) => r.matchId));
+
+  const matches = completed.map((mp) => buildHistoryEntry(mp, id, acceptedMatchIds));
 
   return c.json({ matches, limit, offset });
 });
+
+// Helper: shape a match_players row into the match-history entry the frontend expects.
+// Extracted from the route handler so the complexity budget fits within per-function limits.
+function buildHistoryEntry(mp: MatchPlayerWithMatch, myId: string, acceptedMatchIds: Set<string>) {
+  const opponent = mp.match.players.find((p) => p.user.id !== myId);
+  const me = mp.match.players.find((p) => p.user.id === myId);
+  const endReason: "solved" | "forfeit" = acceptedMatchIds.has(mp.match.id) ? "solved" : "forfeit";
+  // In a forfeit, the player with result=LOST is the one who surrendered.
+  const loser = mp.match.players.find((p) => p.result === "LOST");
+  const forfeiter = endReason === "forfeit" && loser ? loser.user : null;
+
+  return {
+    matchId: mp.match.id,
+    problem: mp.match.problem,
+    opponent: opponent?.user ?? null,
+    opponentRating: opponent?.ratingBefore ?? null,
+    result: me?.result ?? "PENDING",
+    ratingChange: me?.ratingAfter && me?.ratingBefore ? me.ratingAfter - me.ratingBefore : 0,
+    playedAt: mp.match.endedAt ?? mp.match.startedAt,
+    endReason,
+    forfeiter,
+  };
+}
+
+type MatchPlayerWithMatch = {
+  match: {
+    id: string;
+    status: string;
+    startedAt: Date | null;
+    endedAt: Date | null;
+    problem: { id: string; title: string; difficulty: number | null } | null;
+    players: Array<{
+      result: string;
+      ratingBefore: number;
+      ratingAfter: number | null;
+      user: { id: string; username: string | null };
+    }>;
+  };
+};
 
 // Get user by username (public profile)
 // NOTE: This must be LAST because /:username is a catch-all pattern

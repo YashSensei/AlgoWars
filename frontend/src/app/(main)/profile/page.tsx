@@ -289,6 +289,11 @@ export default function ProfilePage() {
                   <div className="text-xs text-text-muted truncate">
                     {match.problem?.title ?? "Unknown Problem"}
                   </div>
+                  {match.endReason === "forfeit" && match.forfeiter?.username && (
+                    <div className="text-[10px] text-yellow-400/80 mt-1 italic">
+                      {match.forfeiter.username} surrendered
+                    </div>
+                  )}
                 </div>
 
                 {/* Rating Change */}

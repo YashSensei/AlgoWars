@@ -1,0 +1,37 @@
+# Render Blueprint — deploys the AlgoWars backend service.
+# Docs: https://render.com/docs/blueprint-spec
+# Frontend is deployed separately on Vercel (Root Directory = frontend).
+#
+# On first deploy: create the Render account, link this repo, and Render auto-detects
+# this file. Secrets marked `sync: false` must be set manually in the dashboard before
+# the service boots successfully.
+
+services:
+  - type: web
+    name: algowars-backend
+    runtime: docker
+    plan: free
+    region: oregon # pick whichever free-tier region is closest to your users
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # AI_MODEL has a sensible default, can be overridden via dashboard
+      - key: AI_MODEL
+        value: claude-sonnet-4-6
+      # Render auto-injects RENDER_EXTERNAL_URL — index.ts reads it for the self-ping
+      # that keeps the free-tier service awake.
+
+      # Secrets — set these in the Render dashboard, not in this file:
+      - key: DATABASE_URL
+        sync: false # Supabase pooler URL
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: MEGALLM_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false # set to the Vercel frontend URL after the frontend is deployed
