@@ -9,6 +9,17 @@ import { formatRatingChange } from "@/lib/utils";
 import { matchesApi, ApiClientError } from "@/lib/api";
 import type { Match } from "@/lib/api/types";
 
+type MatchSubmission = {
+  id: string;
+  userId: string;
+  language: string;
+  verdict: string;
+  code: string;
+  submittedAt: string;
+  judgedAt: string | null;
+  user: { id: string; username: string | null };
+};
+
 export default function ResultsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -22,17 +33,21 @@ export default function ResultsPage() {
 
   // State
   const [match, setMatch] = useState<Match | null>(null);
+  const [submissions, setSubmissions] = useState<MatchSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAnimation, setShowAnimation] = useState(false);
   const [animatedRating, setAnimatedRating] = useState(0);
 
-  // Load match data and refresh user stats
+  // Load match data, submissions, and refresh user stats
   useEffect(() => {
-    const loadMatch = async () => {
+    const loadAll = async () => {
       try {
-        const matchData = await matchesApi.getMatch(matchId);
+        const [matchData, subs] = await Promise.all([
+          matchesApi.getMatch(matchId),
+          matchesApi.getSubmissions(matchId).catch(() => ({ submissions: [] })),
+        ]);
         setMatch(matchData);
-        // Refresh user stats after match ends (updates rating in store)
+        setSubmissions(subs.submissions);
         await refreshUser();
       } catch (err) {
         console.error("Failed to load match:", err instanceof ApiClientError ? err.message : err);
@@ -41,7 +56,7 @@ export default function ResultsPage() {
       }
     };
 
-    loadMatch();
+    loadAll();
   }, [matchId, refreshUser]);
 
   // Calculate result
@@ -275,6 +290,57 @@ export default function ResultsPage() {
                 </div>
               </div>
             </GlassPanel>
+          </div>
+        )}
+
+        {/* Submissions — winning code highlighted */}
+        {submissions.length > 0 && (
+          <div className="w-full max-w-2xl mb-8">
+            <h2 className="text-sm font-bold text-white uppercase tracking-wide mb-3 flex items-center gap-2">
+              <Icon name="code" size={18} className="text-primary" />
+              Submissions
+              <span className="text-xs font-japanese text-white/30 font-normal ml-auto">提出</span>
+            </h2>
+            <div className="space-y-3">
+              {submissions.map((sub) => {
+                const isAccepted = sub.verdict === "ACCEPTED";
+                return (
+                  <GlassPanel
+                    key={sub.id}
+                    padding="p-4"
+                    className={`border ${
+                      isAccepted
+                        ? "border-green-400/40 bg-green-400/5"
+                        : "border-white/10"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 mb-2">
+                      <span className="text-sm font-bold text-white">
+                        {sub.user.username ?? "Unknown"}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded border ${
+                          isAccepted
+                            ? "text-green-400 bg-green-400/10 border-green-400/30"
+                            : "text-red-400 bg-red-400/10 border-red-400/30"
+                        }`}
+                      >
+                        {sub.verdict.replace(/_/g, " ")}
+                      </span>
+                      <span className="text-[10px] text-text-muted uppercase tracking-widest">
+                        {sub.language}
+                      </span>
+                      {isAccepted && (
+                        <Icon name="emoji_events" size={16} className="text-green-400 ml-auto" />
+                      )}
+                    </div>
+                    <pre className="text-xs font-mono text-white/80 bg-black/40 p-3 rounded border border-white/5 overflow-x-auto max-h-80 overflow-y-auto">
+                      <code>{sub.code}</code>
+                    </pre>
+                  </GlassPanel>
+                );
+              })}
+            </div>
           </div>
         )}
 

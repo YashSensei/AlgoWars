@@ -9,7 +9,7 @@
 
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { matches, matchPlayers } from "../db/schema";
+import { matches, matchPlayers, submissions } from "../db/schema";
 import { db } from "../lib/db";
 import { Errors } from "../lib/errors";
 import { authMiddleware } from "../middleware/auth";
@@ -150,37 +150,39 @@ matchRoutes.post("/:id/start", async (c) => {
 
 /**
  * GET /matches/:id/submissions
- * Get all submissions for a match (grouped by user)
+ * Returns all submissions for a completed match — including code, language, and author.
+ * Blocked during active matches to prevent mid-game copying. Open to any authenticated
+ * user once terminal, matching CF/LC's public post-contest submission pattern.
  */
 matchRoutes.get("/:id/submissions", async (c) => {
   const { id } = c.req.param();
   if (!isValidUUID(id)) throw Errors.BadRequest("Invalid match ID");
-  const user = c.get("user");
 
-  // Import submissions here to avoid circular dependency
-  const { submissions } = await import("../db/schema");
-
-  // Verify user is in this match
-  const player = await db.query.matchPlayers.findFirst({
-    where: and(eq(matchPlayers.matchId, id), eq(matchPlayers.userId, user.id)),
+  const match = await db.query.matches.findFirst({
+    where: eq(matches.id, id),
+    columns: { id: true, status: true },
   });
-  if (!player) throw Errors.Forbidden("You are not in this match");
+  if (!match) throw Errors.NotFound("Match");
+  if (match.status !== "COMPLETED" && match.status !== "ABORTED") {
+    throw Errors.BadRequest("Match is still in progress");
+  }
 
-  // Get all submissions for this match
-  const allSubmissions = await db.query.submissions.findMany({
+  const all = await db.query.submissions.findMany({
     where: eq(submissions.matchId, id),
-    columns: { id: true, userId: true, verdict: true, submittedAt: true },
-    orderBy: (s, { desc }) => [desc(s.submittedAt)],
+    columns: {
+      id: true,
+      userId: true,
+      language: true,
+      verdict: true,
+      code: true,
+      submittedAt: true,
+      judgedAt: true,
+    },
+    orderBy: (s, { asc }) => [asc(s.submittedAt)],
+    with: { user: { columns: { id: true, username: true } } },
   });
 
-  // Group by user
-  const mySubmissions = allSubmissions.filter((s) => s.userId === user.id);
-  const opponentSubmissions = allSubmissions.filter((s) => s.userId !== user.id);
-
-  return c.json({
-    my: mySubmissions.map((s) => ({ id: s.id, verdict: s.verdict })),
-    opponent: opponentSubmissions.length,
-  });
+  return c.json({ submissions: all });
 });
 
 /**
