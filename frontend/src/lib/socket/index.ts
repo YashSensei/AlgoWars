@@ -8,10 +8,12 @@ const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 /**
  * Get or create Socket.IO connection
- * Authenticates using Supabase session token
+ * Authenticates using Supabase session token.
+ * Reuses the existing socket even if it's still connecting — prevents callers
+ * racing during the handshake from each spawning a new connection.
  */
 export function getSocket(): Socket {
-  if (socket?.connected) {
+  if (socket) {
     return socket;
   }
 

@@ -15,7 +15,7 @@ import { supabaseAdmin } from "../lib/supabase";
 // JWKS endpoint — fetches public keys for JWT verification (cached by jose)
 const JWKS = createRemoteJWKSet(new URL(`${env.SUPABASE_URL}/auth/v1/.well-known/jwks.json`));
 
-export type AuthPayload = { sub: string };
+export type AuthPayload = { sub: string; email: string };
 
 // Helper: Map DB unique constraint errors to user-friendly messages
 function handleDuplicateError(err: unknown): never {
@@ -138,7 +138,8 @@ export const authService = {
         issuer: `${env.SUPABASE_URL}/auth/v1`,
       });
       if (!payload.sub) throw new Error("Missing sub claim");
-      return { sub: payload.sub };
+      if (typeof payload.email !== "string") throw new Error("Missing email claim");
+      return { sub: payload.sub, email: payload.email };
     } catch {
       throw Errors.Unauthorized("Invalid token");
     }

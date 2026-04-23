@@ -215,7 +215,9 @@ export function setupSocketIO(httpServer: HTTPServer): Server {
     cors: {
       origin: corsOrigins,
       methods: ["GET", "POST"],
-      credentials: true,
+      // Browser rejects origin="*" with credentials=true. We use handshake.auth.token, not cookies,
+      // so credentials can safely be off for wildcard origins.
+      credentials: corsOrigins !== "*",
     },
   });
 

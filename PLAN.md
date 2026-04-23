@@ -43,7 +43,7 @@ AlgoWars is a real-time 1v1 competitive programming platform where users compete
 | Database | PostgreSQL | Reliable, extensible |
 | ORM | **Drizzle** | Lightweight, type-safe, Bun-native |
 | Real-time | Socket.IO | Rooms, reconnection |
-| Auth | JWT + Bun.password | Native, fast |
+| Auth | Supabase Auth (JWKS-verified JWTs) | Email/password + OAuth |
 | Linting | **Biome** | Fast, replaces ESLint+Prettier |
 | Git Hooks | **Husky + lint-staged** | Pre-commit quality |
 
@@ -341,14 +341,16 @@ socket.on('match:end', { winnerId, reason })
 PORT=3000
 NODE_ENV=development
 
-# Database (Docker)
-DATABASE_URL=postgresql://algowars:algowars@localhost:5432/algowars
+# Database (Supabase Postgres)
+DATABASE_URL=postgresql://user:password@db.your-project.supabase.co:5432/postgres
 
-# Auth
-JWT_SECRET=your-secret-key-min-16-chars
+# Supabase Auth (server-side secret key)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=sb_secret_your-secret-key
 
 # AI Judge (MegaLLM)
 MEGALLM_API_KEY=your_megallm_api_key
+AI_MODEL=claude-sonnet-4-6
 ```
 
 ---

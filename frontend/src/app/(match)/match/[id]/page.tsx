@@ -62,22 +62,27 @@ export default function MatchPage() {
     let mounted = true;
     const loadMatch = async () => {
       try {
-        const matchData = await matchesApi.getMatch(matchId);
+        let matchData = await matchesApi.getMatch(matchId);
         if (!mounted) return;
-        setMatch(matchData);
         const opponentPlayer = matchData.players.find((p) => p.user.id !== user?.id);
         if (opponentPlayer) {
           setOpponent(opponentPlayer.user);
           addLog(`Matched against ${opponentPlayer.user.username}`, "info");
         }
+        // If match is still pre-active, trigger the transition, then re-read the
+        // authoritative startedAt so both clients share the same end time and
+        // don't drift apart by whatever seconds separated their join times.
+        if (matchData.status === "WAITING" || matchData.status === "STARTING") {
+          await matchesApi.startMatch(matchId);
+          matchData = await matchesApi.getMatch(matchId);
+          if (!mounted) return;
+        }
+        setMatch(matchData);
         if (matchData.startedAt) {
           const endTime = new Date(matchData.startedAt).getTime() + matchData.duration * 1000;
           setTimeRemaining(Math.max(0, Math.floor((endTime - Date.now()) / 1000)));
         } else {
           setTimeRemaining(matchData.duration);
-        }
-        if (matchData.status === "WAITING" || matchData.status === "STARTING") {
-          await matchesApi.startMatch(matchId);
         }
         addLog("Match started!", "success");
         setMatchState("active");

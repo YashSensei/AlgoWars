@@ -5,9 +5,9 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   DATABASE_URL: z.string().url(),
   SUPABASE_URL: z.string().url(),
-  SUPABASE_SECRET_KEY: z.string(),
-  MEGALLM_API_KEY: z.string(),
-  AI_MODEL: z.string().default("claude-sonnet-4-5-20250929"),
+  SUPABASE_SECRET_KEY: z.string().min(1, "SUPABASE_SECRET_KEY cannot be empty"),
+  MEGALLM_API_KEY: z.string().min(1, "MEGALLM_API_KEY cannot be empty"),
+  AI_MODEL: z.string().min(1).default("claude-sonnet-4-6"),
   AI_TIMEOUT_MS: z.coerce.number().default(30000),
   // CORS origins (comma-separated list, or "*" for all in dev)
   CORS_ORIGINS: z.string().default("*"),

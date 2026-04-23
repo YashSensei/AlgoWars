@@ -8,7 +8,7 @@ import { useAuthStore } from "@/stores/auth";
 
 /**
  * OAuth callback page.
- * Supabase redirects here after GitHub/Google auth.
+ * Supabase redirects here after Google (or any other enabled provider) auth.
  * Ensures DB profile exists, then routes based on username state.
  */
 export default function AuthCallbackPage() {

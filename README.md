@@ -18,9 +18,10 @@ A real-time 1v1 competitive programming platform where users compete head-to-hea
 ### Backend
 - **Runtime**: Bun (faster than Node.js)
 - **Framework**: Hono (lightweight, fast)
-- **Database**: PostgreSQL + Drizzle ORM
+- **Database**: Supabase Postgres + Drizzle ORM
 - **Real-time**: Socket.IO
-- **Auth**: JWT + bcrypt
+- **Auth**: Supabase Auth (JWKS-verified JWTs)
+- **AI Judge**: Claude via MegaLLM (OpenAI-compatible)
 
 ### Frontend
 - **Framework**: Next.js 16 (App Router)
@@ -33,8 +34,9 @@ A real-time 1v1 competitive programming platform where users compete head-to-hea
 
 ### Prerequisites
 - [Bun](https://bun.sh/) (v1.0+)
-- [Node.js](https://nodejs.org/) (v18+)
-- [Docker](https://www.docker.com/) (for PostgreSQL)
+- [Node.js](https://nodejs.org/) (v20+) — for the Next.js frontend
+- A [Supabase](https://supabase.com/) project (free tier works) — hosts Postgres + Auth
+- A [MegaLLM](https://ai.megallm.io) API key — powers the AI judge
 
 ### Installation
 
@@ -44,57 +46,61 @@ A real-time 1v1 competitive programming platform where users compete head-to-hea
    cd AlgoWars
    ```
 
-2. **Start the database**
-   ```bash
-   docker compose up -d
-   ```
-
-3. **Setup backend**
+2. **Setup backend**
    ```bash
    # Install dependencies
    bun install
 
    # Setup environment
    cp .env.example .env
-   # Edit .env with your database URL and API keys
+   # Edit .env — fill in SUPABASE_URL, SUPABASE_SECRET_KEY, DATABASE_URL, MEGALLM_API_KEY
 
-   # Run migrations
+   # Run migrations against your Supabase Postgres
    bun run db:migrate
 
    # Ingest problems from scraped Codeforces data
    bun run db:ingest
 
-   # Start development server
+   # Start development server (default port 3000)
    bun run dev
    ```
 
-4. **Setup frontend**
+3. **Setup frontend**
    ```bash
    cd frontend
 
    # Install dependencies
    npm install
 
-   # Start development server
+   # Setup environment
+   cp .env.example .env.local
+   # Edit .env.local — fill in NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+   # and point NEXT_PUBLIC_API_URL at the backend
+
+   # Start development server (default port 3001)
    npm run dev
    ```
 
-5. **Open the app**
-   - Frontend: http://localhost:3000
-   - Backend: http://localhost:8080
+4. **Open the app**
+   - Frontend: http://localhost:3001
+   - Backend: http://localhost:3000
 
 ## Environment Variables
 
 ### Backend (.env)
 ```env
-DATABASE_URL=postgresql://user:password@localhost:5432/algowars
-JWT_SECRET=your-secret-key-min-16-chars
+DATABASE_URL=postgresql://user:password@db.your-project.supabase.co:5432/postgres
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SECRET_KEY=sb_secret_your-secret-key
 MEGALLM_API_KEY=your-megallm-api-key
+AI_MODEL=claude-sonnet-4-6
 ```
 
 ### Frontend (.env.local)
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:8080
+NEXT_PUBLIC_API_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your-publishable-key
 ```
 
 ## Project Structure

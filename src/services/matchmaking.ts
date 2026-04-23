@@ -4,12 +4,13 @@
  * Uses mutex for atomic queue operations
  */
 
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { matches, matchPlayers, problems, userStats, users } from "../db/schema";
 import { db } from "../lib/db";
 import { logger } from "../lib/logger";
 import { Mutex } from "../lib/mutex";
 import { socketEmit } from "../socket";
+import { fetchAndSaveStatement } from "./problem-fetcher";
 
 const RATING_RANGE = 100; // Match players within ±100 rating
 
@@ -43,16 +44,20 @@ function findMatch(player: QueuedPlayer): QueuedPlayer | null {
   return null;
 }
 
-// Select random problem from rating bucket (only problems with statements)
+// Pick a random problem in bucket; lazy-fetch its statement from Codeforces if not yet cached.
 async function selectProblem(avgRating: number): Promise<string | null> {
   const bucket = getRatingBucket(avgRating);
-  const [problem] = await db
-    .select({ id: problems.id })
+  const [row] = await db
+    .select({ id: problems.id, statement: problems.statement })
     .from(problems)
-    .where(and(eq(problems.ratingBucket, bucket), isNotNull(problems.statement)))
+    .where(eq(problems.ratingBucket, bucket))
     .orderBy(sql`RANDOM()`)
     .limit(1);
-  return problem?.id ?? null;
+  if (!row) return null;
+  if (row.statement) return row.id;
+
+  const fetched = await fetchAndSaveStatement(row.id);
+  return fetched ? row.id : null;
 }
 
 // Notify both players about the match
@@ -83,7 +88,7 @@ async function notifyMatchedPlayers(
   });
 }
 
-// Create match with two players
+// Create match with two players — atomic: if either INSERT fails, both roll back.
 async function createMatch(p1: QueuedPlayer, p2: QueuedPlayer): Promise<string> {
   const avgRating = Math.round((p1.rating + p2.rating) / 2);
   const problemId = await selectProblem(avgRating);
@@ -93,17 +98,20 @@ async function createMatch(p1: QueuedPlayer, p2: QueuedPlayer): Promise<string> 
     throw new Error("No problems available for this rating bracket");
   }
 
-  const result = await db
-    .insert(matches)
-    .values({ problemId, status: "STARTING" })
-    .returning({ id: matches.id });
-  const matchId = result[0]?.id;
-  if (!matchId) throw new Error("Failed to create match");
+  const matchId = await db.transaction(async (tx) => {
+    const result = await tx
+      .insert(matches)
+      .values({ problemId, status: "STARTING" })
+      .returning({ id: matches.id });
+    const id = result[0]?.id;
+    if (!id) throw new Error("Failed to create match");
 
-  await db.insert(matchPlayers).values([
-    { matchId, userId: p1.userId, ratingBefore: p1.rating },
-    { matchId, userId: p2.userId, ratingBefore: p2.rating },
-  ]);
+    await tx.insert(matchPlayers).values([
+      { matchId: id, userId: p1.userId, ratingBefore: p1.rating },
+      { matchId: id, userId: p2.userId, ratingBefore: p2.rating },
+    ]);
+    return id;
+  });
 
   await notifyMatchedPlayers(matchId, p1, p2);
   return matchId;

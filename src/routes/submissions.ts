@@ -1,7 +1,6 @@
 /**
  * Submission Routes
  * POST /submissions - Submit code for a match
- * GET /submissions/status - Check current submission status
  */
 
 import { and, eq } from "drizzle-orm";
@@ -121,18 +120,12 @@ submissionRoutes.post("/", async (c) => {
 });
 
 /**
- * GET /submissions/status
- * Get current submission status for the authenticated user
- */
-submissionRoutes.get("/status", async (c) => {
-  const user = c.get("user");
-  const result = await submissionQueue.pollResult(user.id);
-  return c.json(result);
-});
-
-/**
  * GET /submissions/:id
- * Get a specific submission by ID
+ * Returns submission metadata (no code). Open to any authenticated user —
+ * this matches Codeforces/LeetCode-style profile pages where anyone can view
+ * another user's verdict history. The `code` column is deliberately omitted;
+ * if a future endpoint exposes code, it should be participant-only until
+ * the match ends.
  */
 submissionRoutes.get("/:id", async (c) => {
   const { id } = c.req.param();
@@ -154,7 +147,6 @@ submissionRoutes.get("/:id", async (c) => {
   });
 
   if (!submission) throw Errors.NotFound("Submission");
-
   return c.json(submission);
 });
 
@@ -195,7 +187,6 @@ function mapVerdictToEnum(verdict: string): (typeof submissions.verdict.enumValu
     COMPILE_ERROR: "COMPILE_ERROR",
     TIME_LIMIT: "TIME_LIMIT",
     MEMORY_LIMIT: "MEMORY_LIMIT",
-    INVALID_CODE: "WRONG_ANSWER",
     JUDGE_TIMEOUT: "JUDGE_TIMEOUT",
   };
   return mapping[verdict] ?? "PENDING";
