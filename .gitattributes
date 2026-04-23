@@ -1,0 +1,11 @@
+# Force LF line endings for all text files, regardless of git's autocrlf setting.
+# Prevents CRLF drift on Windows checkouts which breaks Biome formatting checks.
+* text=auto eol=lf
+
+# Explicit binaries (so git doesn't try to re-encode them)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
