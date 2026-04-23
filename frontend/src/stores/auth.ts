@@ -40,9 +40,18 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         return;
       }
 
-      // Fetch our DB profile
-      const user = await usersApi.getMe();
-      set({ user, initialized: true });
+      // Fetch our DB profile; auto-create on first OAuth login (profile doesn't exist yet).
+      try {
+        const user = await usersApi.getMe();
+        set({ user, initialized: true });
+      } catch (err) {
+        if (err instanceof ApiClientError && err.status === 401) {
+          const { user } = await authApi.ensureProfile();
+          set({ user, initialized: true });
+          return;
+        }
+        throw err;
+      }
     } catch {
       set({ initialized: true });
     }
@@ -93,7 +102,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     }
   },
 
-  // OAuth login (GitHub, Google)
+  // OAuth login (Google — add other providers by enabling them in Supabase dashboard)
   loginWithOAuth: async (provider: Provider) => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,

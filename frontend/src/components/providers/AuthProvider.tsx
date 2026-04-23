@@ -15,18 +15,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Initialize auth from existing session
     initialize();
 
-    // Listen for auth state changes (login, logout, token refresh, OAuth callback)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event) => {
-        if (event === "SIGNED_IN") {
-          // Re-initialize to fetch user profile
+    // Listen for auth state changes. In supabase-js v2, SIGNED_IN fires on every
+    // token refresh — not just on real sign-in. If we already have a user in
+    // the store, this is a refresh: keep the UI and let the next API call pick
+    // up the new token automatically (the client reads it dynamically).
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === "SIGNED_IN") {
+        const alreadyAuthed = !!useAuthStore.getState().user;
+        if (!alreadyAuthed) {
           useAuthStore.setState({ initialized: false });
           await useAuthStore.getState().initialize();
-        } else if (event === "SIGNED_OUT") {
-          useAuthStore.setState({ user: null, initialized: true });
         }
-      },
-    );
+      } else if (event === "SIGNED_OUT") {
+        useAuthStore.setState({ user: null, initialized: true });
+      }
+    });
 
     return () => subscription.unsubscribe();
   }, [initialize]);

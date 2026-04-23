@@ -64,10 +64,14 @@ async function fetchApi<T>(
   const data = await response.json();
 
   if (!response.ok) {
-    // Auto-logout on expired/invalid token (skip for auth endpoints)
+    // Auto-logout on expired/invalid token (skip for auth endpoints and the OAuth callback page,
+    // which orchestrates its own auth flow and will race with a forced logout).
     if (response.status === 401 && typeof window !== "undefined" && !endpoint.startsWith("/auth/")) {
-      await supabase.auth.signOut();
-      window.location.href = "/login";
+      const onCallbackPage = window.location.pathname.startsWith("/auth/callback");
+      if (!onCallbackPage) {
+        await supabase.auth.signOut();
+        window.location.href = "/login";
+      }
     }
     throw new ApiClientError(
       data.error || data.message || "Request failed",

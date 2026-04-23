@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod/v4";
 import { Errors } from "../lib/errors";
-import { authMiddleware } from "../middleware/auth";
+import { supabaseAuthMiddleware } from "../middleware/auth";
 import { authService } from "../services/auth";
 
 export const authRoutes = new Hono();
@@ -101,10 +101,11 @@ authRoutes.post("/refresh", async (c) => {
 /**
  * POST /auth/ensure-profile
  * For OAuth users: ensures a DB profile exists after Supabase auth.
+ * Uses the token-only middleware because the DB row may not exist yet (first OAuth login).
  * Returns the user profile (with or without username).
  */
-authRoutes.post("/ensure-profile", authMiddleware, async (c) => {
-  const { id, email } = c.get("user");
+authRoutes.post("/ensure-profile", supabaseAuthMiddleware, async (c) => {
+  const { id, email } = c.get("supabaseUser");
   const user = await authService.ensureProfile(id, email);
   return c.json({ user });
 });

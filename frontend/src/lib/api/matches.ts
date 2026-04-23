@@ -51,11 +51,20 @@ export const matchesApi = {
     api.post<{ status: string; winnerId: string }>(`/matches/${matchId}/forfeit`),
 
   /**
-   * Get submissions for a match (grouped by my/opponent)
+   * Get all submissions for a completed match, including code.
+   * Returns 400 if match is still in progress (prevents mid-game code leaks).
    */
   getSubmissions: (matchId: string) =>
     api.get<{
-      my: { id: string; verdict: string }[];
-      opponent: number;
+      submissions: {
+        id: string;
+        userId: string;
+        language: string;
+        verdict: string;
+        code: string;
+        submittedAt: string;
+        judgedAt: string | null;
+        user: { id: string; username: string | null };
+      }[];
     }>(`/matches/${matchId}/submissions`),
 };

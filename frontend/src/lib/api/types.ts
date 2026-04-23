@@ -156,19 +156,6 @@ export interface SubmissionResponse {
   winnerId?: string;
 }
 
-// Submission status response
-export interface SubmissionStatusResponse {
-  status: "queued" | "busy" | "judging" | "complete";
-  submissionId?: string;
-  verdict?: {
-    verdict: string;
-    feedback?: string;
-    confidence?: number;
-    isFinal: boolean;
-  };
-  error?: string;
-}
-
 // Submission record
 export interface Submission {
   id: string;

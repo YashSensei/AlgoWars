@@ -7,9 +7,12 @@ on:
     branches: [main]
 
 env:
+  # Dummy values — satisfy env-schema shape for module load; the test suite only hits /health
+  # which doesn't actually talk to Postgres, Supabase, or MegaLLM.
   DATABASE_URL: postgresql://test:test@localhost:5432/test
-  JWT_SECRET: test-secret-key-for-ci-only
-  MEGALLM_API_KEY: test-key-for-ci
+  SUPABASE_URL: https://example.supabase.co
+  SUPABASE_SECRET_KEY: sb_secret_dummy_ci_value
+  MEGALLM_API_KEY: dummy-key-for-ci
 
 jobs:
   quality:

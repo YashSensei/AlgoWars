@@ -132,16 +132,6 @@ class SubmissionQueue {
   }
 
   /**
-   * Poll for user's verdict status
-   */
-  async pollResult(userId: string): Promise<SubmissionStatus> {
-    if (!this.activeSubmissions.has(userId)) {
-      return { status: "complete", error: "No active submission" };
-    }
-    return { status: "judging" };
-  }
-
-  /**
    * Force clear a user's submission (admin use)
    */
   forceReset(userId?: string): void {

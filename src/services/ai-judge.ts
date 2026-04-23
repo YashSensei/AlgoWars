@@ -20,7 +20,7 @@ export type Verdict =
   | "COMPILE_ERROR"
   | "TIME_LIMIT"
   | "MEMORY_LIMIT"
-  | "INVALID_CODE";
+  | "JUDGE_TIMEOUT";
 
 export interface JudgeResult {
   verdict: Verdict;
@@ -66,7 +66,7 @@ Think step by step:
 4. Are there any logical errors?
 
 Then output ONLY this JSON (nothing else):
-{"verdict":"ACCEPTED or WRONG_ANSWER or COMPILE_ERROR or RUNTIME_ERROR","confidence":85}`;
+{"verdict":"ACCEPTED or WRONG_ANSWER or COMPILE_ERROR or RUNTIME_ERROR","confidence":85,"feedback":"one short sentence explaining the verdict"}`;
 
 const VALID_VERDICTS: Verdict[] = [
   "ACCEPTED",
@@ -75,7 +75,6 @@ const VALID_VERDICTS: Verdict[] = [
   "COMPILE_ERROR",
   "TIME_LIMIT",
   "MEMORY_LIMIT",
-  "INVALID_CODE",
 ];
 
 // Build prompt with problem and code
@@ -174,12 +173,12 @@ async function callAI(prompt: string, signal: AbortSignal): Promise<string | nul
 function handleError(err: unknown): JudgeResult {
   if (err instanceof Error && err.name === "AbortError") {
     logger.error("AI-Judge", "Request timed out");
-    return { verdict: "JUDGE_TIMEOUT" as Verdict, confidence: 0, feedback: "Judge timed out" };
+    return { verdict: "JUDGE_TIMEOUT", confidence: 0, feedback: "Judge timed out" };
   }
   const message = err instanceof Error ? err.message : "Unknown error";
   logger.error("AI-Judge", "API error", { error: message });
   return {
-    verdict: "JUDGE_TIMEOUT" as Verdict,
+    verdict: "JUDGE_TIMEOUT",
     confidence: 0,
     feedback: `Judge error: ${message}`,
   };

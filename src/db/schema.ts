@@ -49,7 +49,7 @@ export const users = pgTable("users", {
   role: userRoleEnum("role").default("USER").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}).enableRLS();
 
 export const userStats = pgTable("user_stats", {
   id: text("id")
@@ -65,7 +65,7 @@ export const userStats = pgTable("user_stats", {
   draws: integer("draws").default(0).notNull(),
   winStreak: integer("win_streak").default(0).notNull(),
   maxStreak: integer("max_streak").default(0).notNull(),
-});
+}).enableRLS();
 
 // ============================================
 // PROBLEMS
@@ -98,7 +98,7 @@ export const problems = pgTable(
     index("difficulty_idx").on(t.difficulty),
     index("rating_bucket_idx").on(t.ratingBucket),
   ],
-);
+).enableRLS();
 
 // ============================================
 // MATCHES
@@ -120,7 +120,7 @@ export const matches = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [index("status_idx").on(t.status), index("created_idx").on(t.createdAt)],
-);
+).enableRLS();
 
 // ============================================
 // MATCH PLAYERS (Junction)
@@ -147,7 +147,7 @@ export const matchPlayers = pgTable(
     uniqueIndex("match_user_idx").on(t.matchId, t.userId),
     index("user_matches_idx").on(t.userId), // For finding user's matches
   ],
-);
+).enableRLS();
 
 // ============================================
 // SUBMISSIONS
@@ -175,7 +175,7 @@ export const submissions = pgTable(
     judgedAt: timestamp("judged_at"),
   },
   (t) => [index("match_verdict_idx").on(t.matchId, t.verdict)],
-);
+).enableRLS();
 
 // ============================================
 // RELATIONS

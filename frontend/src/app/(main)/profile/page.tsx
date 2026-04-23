@@ -113,9 +113,6 @@ export default function ProfilePage() {
                   Find Match
                 </Button>
               </Link>
-              <Button variant="ghost" size="sm" leftIcon="settings">
-                Settings
-              </Button>
             </div>
           </div>
         </GlassPanel>
@@ -244,9 +241,10 @@ export default function ProfilePage() {
         ) : matchHistory.length > 0 ? (
           <div className="space-y-3">
             {matchHistory.map((match) => (
-              <div
+              <Link
                 key={match.matchId}
-                className={`flex items-center gap-4 p-4 rounded-lg border transition-colors hover:bg-white/5 ${
+                href={`/results/${match.matchId}`}
+                className={`flex items-center gap-4 p-4 rounded-lg border transition-colors hover:bg-white/5 cursor-pointer ${
                   match.result === "WON"
                     ? "border-green-400/20 bg-green-400/5"
                     : match.result === "DRAW"
@@ -310,7 +308,7 @@ export default function ProfilePage() {
                     {formatRelativeTime(match.playedAt)}
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         ) : (

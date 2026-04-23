@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Logo, StatusIndicator, Button, Icon } from "@/components/ui";
-import { useIsAuthenticated, useUser, useAuthStore } from "@/stores";
+import { useRouter } from "next/navigation";
+import { Button, Icon, Logo, StatusIndicator } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { useAuthStore, useIsAuthenticated, useUser } from "@/stores";
 
 interface HeaderProps {
   /** Make header sticky with blur background */
@@ -14,9 +15,15 @@ interface HeaderProps {
 }
 
 export function Header({ sticky = true, showBorder = true, className }: HeaderProps) {
+  const router = useRouter();
   const isAuthenticated = useIsAuthenticated();
   const user = useUser();
   const logout = useAuthStore((s) => s.logout);
+
+  async function handleLogout() {
+    await logout();
+    router.push("/login");
+  }
 
   return (
     <header
@@ -55,11 +62,15 @@ export function Header({ sticky = true, showBorder = true, className }: HeaderPr
               Arena
             </Link>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-white font-bold uppercase">
+              <Link
+                href="/profile"
+                className="text-xs text-white font-bold uppercase hover:text-primary transition-colors"
+              >
                 {user?.username}
-              </span>
+              </Link>
               <button
-                onClick={logout}
+                type="button"
+                onClick={handleLogout}
                 className="text-text-muted hover:text-primary text-[10px] uppercase tracking-wide transition-colors"
               >
                 Logout

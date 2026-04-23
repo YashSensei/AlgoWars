@@ -14,8 +14,13 @@ export const db = drizzle(client, { schema });
  */
 const DB_PING_INTERVAL_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
 
+export async function verifyDbConnection(): Promise<void> {
+  await db.execute(sql`SELECT 1`);
+  logger.info("DB", "Connection verified");
+}
+
 export function startDbKeepAlive(): NodeJS.Timeout {
-  const interval = setInterval(async () => {
+  return setInterval(async () => {
     try {
       await db.execute(sql`SELECT 1`);
       logger.info("DB", "Keep-alive ping successful");
@@ -23,11 +28,4 @@ export function startDbKeepAlive(): NodeJS.Timeout {
       logger.error("DB", "Keep-alive ping failed", err);
     }
   }, DB_PING_INTERVAL_MS);
-
-  // Also ping immediately on startup to verify connection
-  db.execute(sql`SELECT 1`)
-    .then(() => logger.info("DB", "Connection verified"))
-    .catch((err) => logger.error("DB", "Initial connection failed", err));
-
-  return interval;
 }
