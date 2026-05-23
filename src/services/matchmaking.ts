@@ -2,6 +2,7 @@
  * Matchmaking Service
  * In-memory queue with rating-based pairing
  * Uses mutex for atomic queue operations
+ * Falls back to bot opponent after 15s with no real match.
  */
 
 import { eq, sql } from "drizzle-orm";
@@ -10,9 +11,11 @@ import { db } from "../lib/db";
 import { logger } from "../lib/logger";
 import { Mutex } from "../lib/mutex";
 import { socketEmit } from "../socket";
+import { botEngine } from "./bot-engine";
 import { fetchAndSaveStatement } from "./problem-fetcher";
 
-const RATING_RANGE = 100; // Match players within ±100 rating
+const RATING_RANGE = 100;
+const BOT_FALLBACK_MS = 15_000; // Pair with bot after 15s with no real opponent
 
 interface QueuedPlayer {
   userId: string;
@@ -22,6 +25,9 @@ interface QueuedPlayer {
 
 // In-memory queue
 const queue: Map<string, QueuedPlayer> = new Map();
+
+// Bot fallback timers (userId → timeout handle). Cleared when matched or leave.
+const botTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 // Single mutex for all queue operations (prevents double-matching)
 const queueMutex = new Mutex();
@@ -131,6 +137,66 @@ async function hasActiveMatch(userId: string): Promise<string | null> {
   return null;
 }
 
+// Select a random bot account near the given rating
+async function selectRandomBot(rating: number): Promise<QueuedPlayer | null> {
+  const bot = await db.query.users.findFirst({
+    where: eq(users.isBot, true),
+    columns: { id: true },
+    orderBy: sql`RANDOM()`,
+  });
+  if (!bot) return null;
+  const stats = await db.query.userStats.findFirst({
+    where: eq(userStats.userId, bot.id),
+  });
+  return { userId: bot.id, rating: stats?.rating ?? rating, joinedAt: Date.now() };
+}
+
+// Pair a queued player with a bot, create the match, start bot engine
+async function matchWithBot(player: QueuedPlayer): Promise<void> {
+  const bot = await selectRandomBot(player.rating);
+  if (!bot) {
+    logger.warn("Matchmaking", "No bot accounts available");
+    return;
+  }
+
+  await queueMutex.withLock(async () => {
+    // Player might have already been matched by a real user or left
+    if (!queue.has(player.userId)) return;
+    queue.delete(player.userId);
+    socketEmit.trackQueueLeave(player.userId);
+  });
+
+  logger.info(
+    "Matchmaking",
+    `Bot match for ${player.userId.slice(0, 8)} vs bot ${bot.userId.slice(0, 8)}`,
+  );
+  const matchId = await createMatch(player, bot);
+  // Start bot behavior (fake submissions + eventual solve)
+  const match = await db.query.matches.findFirst({
+    where: eq(matches.id, matchId),
+    columns: { problemId: true },
+  });
+  if (match?.problemId) {
+    botEngine.start(matchId, bot.userId, match.problemId);
+  }
+}
+
+function startBotTimer(player: QueuedPlayer): void {
+  const timer = setTimeout(() => {
+    botTimers.delete(player.userId);
+    matchWithBot(player);
+  }, BOT_FALLBACK_MS);
+  botTimers.set(player.userId, timer);
+}
+
+function cancelBotTimer(userId: string): void {
+  const timer = botTimers.get(userId);
+  if (timer) {
+    clearTimeout(timer);
+    botTimers.delete(userId);
+  }
+}
+
 // Public API
 export const matchmaking = {
   /**
@@ -185,8 +251,9 @@ export const matchmaking = {
           return { status: "queued" };
         }
 
-        // Atomic: remove opponent from queue and create match
+        // Atomic: remove opponent from queue, cancel their bot timer, and create match
         queue.delete(opponent.userId);
+        cancelBotTimer(opponent.userId);
         socketEmit.trackQueueLeave(opponent.userId);
         logger.info(
           "Matchmaking",
@@ -196,9 +263,10 @@ export const matchmaking = {
         return { status: "matched", matchId };
       }
 
-      // No opponent found, add to queue
+      // No opponent found, add to queue and start bot fallback timer
       queue.set(userId, player);
       socketEmit.trackQueueJoin(userId);
+      startBotTimer(player);
       logger.info("Matchmaking", `User ${userId.slice(0, 8)} (${stats.rating}) joined queue`, {
         queueSize: queue.size,
       });
@@ -213,6 +281,7 @@ export const matchmaking = {
     return queueMutex.withLock(async () => {
       const removed = queue.delete(userId);
       if (removed) {
+        cancelBotTimer(userId);
         socketEmit.trackQueueLeave(userId);
         logger.info("Matchmaking", `User ${userId.slice(0, 8)} left queue`, {
           queueSize: queue.size,
@@ -242,6 +311,7 @@ export const matchmaking = {
       for (const [userId] of queue) {
         if (!socketEmit.isUserConnected(userId)) {
           queue.delete(userId);
+          cancelBotTimer(userId);
           socketEmit.trackQueueLeave(userId);
           removed++;
           logger.info("Matchmaking", `Removed stale user ${userId.slice(0, 8)} from queue`);

@@ -30,8 +30,9 @@ bun run db:studio        # Open Drizzle Studio (visual DB browser)
 # Note: docker-compose.yml exists for local Postgres fallback but isn't the primary path
 
 # Problem Management (direct script execution)
-bun scripts/fetch-statements.ts   # Bulk fetch problem statements from Codeforces (~4 min)
-bun scripts/fetch-single.ts 1A    # Fetch single problem statement by ID
+bun scripts/ingest-from-cf-api.ts  # Ingest all rated problems from Codeforces API (~30s, batch)
+bun scripts/fetch-statements.ts    # Pre-warm statements for 0800-1399 bucket (~4 min, optional)
+bun scripts/fetch-single.ts 1A     # Fetch single problem statement by ID
 
 # Testing
 bun test                 # Run Bun test runner (unit tests)
@@ -151,7 +152,7 @@ Validated via Zod in `src/lib/env.ts` (fails fast on startup; secret keys reject
 - `SUPABASE_SECRET_KEY` - Server-side secret key, `sb_secret_...` (required, non-empty)
 - `MEGALLM_API_KEY` - MegaLLM API key for AI judge (required, non-empty)
 - `AI_MODEL` - Model ID (default: `claude-sonnet-4-6`)
-- `AI_TIMEOUT_MS` - Judge timeout in ms (default: 30000)
+- `AI_TIMEOUT_MS` - Judge timeout in ms (default: 60000)
 - `CORS_ORIGINS` - Comma-separated origins or `"*"` (default: `"*"`)
 - `PORT` - Server port (default: 3000)
 - `NODE_ENV` - development | production | test
@@ -176,3 +177,37 @@ Key integration points:
 - **Frontend env example** lives in `frontend/.env.example` — copy to `.env.local` before running `npm run dev`.
 
 Frontend internals (route groups, Zustand stores, Monaco, shadcn) are deliberately not documented here — read the code. This section only captures cross-stack contracts that can't be derived from one side.
+
+### Startup Lifecycle (src/index.ts)
+On boot, in order:
+1. `verifyDbConnection()` — exits with code 1 if Supabase is unreachable
+2. `abortZombieMatches()` — marks any leftover `ACTIVE`/`STARTING` matches as `ABORTED` (no rating penalty). Needed because in-memory timers are lost on restart.
+3. HTTP server + Socket.IO listen on `PORT`
+4. Queue cleanup interval — every 30s, removes stale matchmaking entries
+5. DB keep-alive pinger — every 5 days, `SELECT 1` to prevent Supabase free-tier pause
+6. Self-ping (production only) — every 14 min, fetches `RENDER_EXTERNAL_URL/health` to prevent Render free-tier sleep
+
+Graceful shutdown on SIGTERM/SIGINT clears all intervals + 5s force-exit.
+
+### Match State Machine (src/services/match-engine.ts)
+```
+WAITING* → STARTING → ACTIVE → COMPLETED
+                  ↘            ↗
+                   → ABORTED ←
+```
+*WAITING is reserved for future lobby mode; matchmaking creates directly in STARTING.
+
+Every state-modifying method runs inside `matchMutexes.withLock(matchId, ...)`. Invalid transitions return `{success: false}`, never throw. Terminal states (COMPLETED, ABORTED) trigger a 5s delayed mutex cleanup.
+
+### Problem Lazy-Fetch (src/services/problem-fetcher.ts)
+Problems are ingested from the Codeforces API via `scripts/ingest-from-cf-api.ts` (metadata only, no statement). Statements are fetched on-demand when a match selects a problem without one cached. The fetcher:
+- Downloads + parses Codeforces HTML → stores `statement`, `timeLimit`, `memoryLimit`
+- Uses `MutexManager<problemId>` to prevent duplicate fetches on the same problem
+- Is also used by `scripts/fetch-statements.ts` for optional batch pre-warming
+
+### Deployment (Render backend + Vercel frontend)
+- `Dockerfile` builds with `oven/bun:1.3-slim` (multi-stage, excludes frontend)
+- `render.yaml` defines the Render blueprint (runtime: docker, free plan, `/health` check)
+- Frontend deployed on Vercel with Root Directory = `frontend`
+- CORS handshake: backend `CORS_ORIGINS` env var must equal the Vercel production URL exactly (no trailing slash)
+- `RENDER_EXTERNAL_URL` is auto-injected by Render; the self-ping uses it to keep free tier awake

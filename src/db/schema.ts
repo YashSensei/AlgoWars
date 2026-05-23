@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   pgEnum,
@@ -44,9 +45,10 @@ export const users = pgTable("users", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
-  username: varchar("username", { length: 32 }).unique(), // null for OAuth users until they choose one
+  username: varchar("username", { length: 32 }).unique(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   role: userRoleEnum("role").default("USER").notNull(),
+  isBot: boolean("is_bot").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }).enableRLS();

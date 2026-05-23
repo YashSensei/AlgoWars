@@ -9,14 +9,22 @@
  */
 
 import { eq, sql } from "drizzle-orm";
-import { matches, matchPlayers, userStats } from "../db/schema";
+import { matches, matchPlayers, userStats, users } from "../db/schema";
 import { db } from "../lib/db";
 import { logger } from "../lib/logger";
 import { MutexManager } from "../lib/mutex";
 import { socketEmit } from "../socket";
+import { botEngine } from "./bot-engine";
 
-// Rating change constants
-const RATING_CHANGE = 5;
+// Elo rating calculation (K=32, standard formula).
+// Beating a stronger player earns more; beating a weaker player earns less.
+const ELO_K = 32;
+const RATING_FLOOR = 100;
+
+function calculateEloDelta(winnerRating: number, loserRating: number): number {
+  const expected = 1 / (1 + 10 ** ((loserRating - winnerRating) / 400));
+  return Math.max(1, Math.round(ELO_K * (1 - expected)));
+}
 
 // Per-match mutexes - ensures atomic operations per match
 const matchMutexes = new MutexManager<string>();
@@ -91,19 +99,29 @@ function buildStatsUpdate(result: "WON" | "LOST" | "DRAW", newRating: number) {
   };
 }
 
+async function isBot(userId: string): Promise<boolean> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { isBot: true },
+  });
+  return user?.isBot ?? false;
+}
+
 async function updatePlayerRating(
   userId: string,
   matchId: string,
   result: "WON" | "LOST" | "DRAW",
   ratingDelta: number,
 ): Promise<void> {
+  if (await isBot(userId)) return;
+
   const stats = await db.query.userStats.findFirst({ where: eq(userStats.userId, userId) });
   if (!stats) {
     logger.error("MatchEngine", `Stats not found for user ${userId.slice(0, 8)}`);
     return;
   }
 
-  const newRating = Math.max(0, stats.rating + ratingDelta);
+  const newRating = Math.max(RATING_FLOOR, stats.rating + ratingDelta);
 
   await db.transaction(async (tx) => {
     await tx
@@ -246,15 +264,17 @@ export const matchEngine = {
         .set({ status: "COMPLETED", winnerId: userId, endedAt: new Date() })
         .where(eq(matches.id, matchId));
 
-      // Update ratings
-      for (const player of match.players) {
-        const isWinner = player.userId === userId;
-        const result = isWinner ? "WON" : "LOST";
-        const ratingDelta = isWinner ? RATING_CHANGE : -RATING_CHANGE;
-        await updatePlayerRating(player.userId, matchId, result, ratingDelta);
-        socketEmit.clearUserMatch(player.userId);
+      // Update ratings using Elo — winner gains, loser loses the same delta
+      const winner = match.players.find((p) => p.userId === userId);
+      const loser = match.players.find((p) => p.userId !== userId);
+      if (winner && loser) {
+        const delta = calculateEloDelta(winner.ratingBefore, loser.ratingBefore);
+        await updatePlayerRating(winner.userId, matchId, "WON", delta);
+        await updatePlayerRating(loser.userId, matchId, "LOST", -delta);
       }
+      for (const p of match.players) socketEmit.clearUserMatch(p.userId);
 
+      botEngine.cancel(matchId);
       socketEmit.matchEnd(matchId, { winnerId: userId, reason: "solved" });
       logger.info("MatchEngine", `Match COMPLETED: ${matchId.slice(0, 8)}`, {
         winner: userId.slice(0, 8),
@@ -314,15 +334,17 @@ export const matchEngine = {
         .set({ status: "COMPLETED", winnerId: opponent.userId, endedAt: new Date() })
         .where(eq(matches.id, matchId));
 
-      // Update ratings
-      for (const player of match.players) {
-        const isWinner = player.userId === opponent.userId;
-        const result = isWinner ? "WON" : "LOST";
-        const ratingDelta = isWinner ? RATING_CHANGE : -RATING_CHANGE;
-        await updatePlayerRating(player.userId, matchId, result, ratingDelta);
-        socketEmit.clearUserMatch(player.userId);
+      // Update ratings using Elo
+      const winnerPlayer = match.players.find((p) => p.userId === opponent.userId);
+      const loserPlayer = match.players.find((p) => p.userId === forfeitingUserId);
+      if (winnerPlayer && loserPlayer) {
+        const delta = calculateEloDelta(winnerPlayer.ratingBefore, loserPlayer.ratingBefore);
+        await updatePlayerRating(winnerPlayer.userId, matchId, "WON", delta);
+        await updatePlayerRating(loserPlayer.userId, matchId, "LOST", -delta);
       }
+      for (const p of match.players) socketEmit.clearUserMatch(p.userId);
 
+      botEngine.cancel(matchId);
       socketEmit.matchEnd(matchId, { winnerId: opponent.userId, reason });
       logger.info("MatchEngine", `Match FORFEITED: ${matchId.slice(0, 8)}`, {
         forfeit: forfeitingUserId.slice(0, 8),
@@ -343,7 +365,6 @@ export const matchEngine = {
     matchId: string,
     reason: "timeout" | "disconnect" | "cancelled" = "timeout",
   ): Promise<{ success: boolean; error?: string }> {
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: State machine requires multiple checks
     return matchMutexes.withLock(matchId, async () => {
       const match = await db.query.matches.findFirst({
         where: eq(matches.id, matchId),
@@ -365,19 +386,16 @@ export const matchEngine = {
         .set({ status: "ABORTED", endedAt: new Date() })
         .where(eq(matches.id, matchId));
 
-      // Both players lose rating (only if was ACTIVE)
-      if (match.status === "ACTIVE") {
-        for (const player of match.players) {
-          await updatePlayerRating(player.userId, matchId, "DRAW", -RATING_CHANGE);
-          socketEmit.clearUserMatch(player.userId);
+      // Abort/timeout: no rating change — neither player proved anything.
+      // Just record the draw and clean up socket state.
+      for (const player of match.players) {
+        if (match.status === "ACTIVE") {
+          await updatePlayerRating(player.userId, matchId, "DRAW", 0);
         }
-      } else {
-        // Just clean up socket state
-        for (const player of match.players) {
-          socketEmit.clearUserMatch(player.userId);
-        }
+        socketEmit.clearUserMatch(player.userId);
       }
 
+      botEngine.cancel(matchId);
       socketEmit.matchEnd(matchId, { winnerId: null, reason });
       logger.info("MatchEngine", `Match ABORTED: ${matchId.slice(0, 8)}`, { reason });
 

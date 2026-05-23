@@ -134,7 +134,9 @@ userRoutes.get("/me/matches", authMiddleware, async (c) => {
   });
 
   // Filter to only completed matches
-  const completed = history.filter((mp) => mp.match.status === "COMPLETED");
+  const completed = history.filter(
+    (mp) => mp.match.status === "COMPLETED" || mp.match.status === "ABORTED",
+  );
 
   // Batch-fetch which of these matches had at least one ACCEPTED submission.
   // Absence of ACCEPTED in a COMPLETED match means someone forfeited.
