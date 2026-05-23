@@ -158,7 +158,7 @@ export default function MatchPage() {
     return () => clearInterval(interval);
   }, [match?.startedAt, match?.duration]);
 
-  // Handle timeout navigation separately (avoids setState during render)
+  // Handle timeout navigation — only if idle (not mid-submission, which has its own navigation)
   useEffect(() => {
     if (matchState === "active" && timeRemaining === 0) {
       router.push(`/results/${matchId}?reason=timeout`);

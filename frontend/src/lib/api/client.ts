@@ -22,64 +22,65 @@ export class ApiClientError extends Error {
   }
 }
 
+// Internal: get current access token from Supabase session
+async function getToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
+}
+
+// Internal: make a single fetch with the given token
+async function doFetch(url: string, options: RequestInit, token: string | null): Promise<Response> {
+  const headers: HeadersInit = { "Content-Type": "application/json", ...options.headers };
+  if (token) (headers as Record<string, string>).Authorization = `Bearer ${token}`;
+  return fetch(url, { ...options, headers });
+}
+
 /**
- * Fetch wrapper with error handling and JSON parsing
+ * Fetch wrapper with error handling, JSON parsing, and automatic token refresh on 401.
+ * On first 401: refreshes the Supabase session and retries once with the new token.
+ * On second 401: treats as real session death → logout (unless on a protected page).
  */
-async function fetchApi<T>(
-  endpoint: string,
-  options: RequestInit = {},
-): Promise<T> {
+async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
+  let token = await getToken();
+  let response = await doFetch(url, options, token);
 
-  // Get token from Supabase session
-  let token: string | null = null;
-  if (typeof window !== "undefined") {
-    const { data: { session } } = await supabase.auth.getSession();
-    token = session?.access_token ?? null;
+  // On 401, try refreshing the session once before giving up
+  if (response.status === 401 && typeof window !== "undefined") {
+    const { data } = await supabase.auth.refreshSession();
+    if (data.session) {
+      token = data.session.access_token;
+      response = await doFetch(url, options, token);
+    }
   }
-
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-    ...options.headers,
-  };
-
-  if (token) {
-    (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
 
   // Handle non-JSON responses
   const contentType = response.headers.get("content-type");
   if (!contentType?.includes("application/json")) {
-    if (!response.ok) {
-      throw new ApiClientError("Request failed", response.status);
-    }
+    if (!response.ok) throw new ApiClientError("Request failed", response.status);
     return {} as T;
   }
 
-  const data = await response.json();
+  const responseData = await response.json();
 
   if (!response.ok) {
-    // Auto-logout on expired/invalid token (skip for auth endpoints and the OAuth callback page,
-    // which orchestrates its own auth flow and will race with a forced logout).
+    // After retry still 401 → real session death → logout (skip protected pages)
     if (response.status === 401 && typeof window !== "undefined" && !endpoint.startsWith("/auth/")) {
-      const onCallbackPage = window.location.pathname.startsWith("/auth/callback");
-      if (!onCallbackPage) {
+      const path = window.location.pathname;
+      const isProtectedFlow = path.startsWith("/auth/callback") || path.startsWith("/match/");
+      if (!isProtectedFlow) {
         await supabase.auth.signOut();
         window.location.href = "/login";
       }
     }
     throw new ApiClientError(
-      data.error || data.message || "Request failed",
+      responseData.error || responseData.message || "Request failed",
       response.status,
     );
   }
 
-  return data as T;
+  return responseData as T;
 }
 
 // API client methods
