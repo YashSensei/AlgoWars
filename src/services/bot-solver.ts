@@ -13,26 +13,30 @@ const client = new OpenAI({
   apiKey: env.MEGALLM_API_KEY,
 });
 
-const SOLVER_PROMPT = `You are an expert competitive programmer. Write a correct Python 3 solution for the following problem.
+const SOLVER_PROMPT = `Write a Python 3 solution. Output ONLY code. No text, no explanation, no markdown.
 
-RULES:
-- Use standard input/output (sys.stdin / print)
-- Handle all edge cases described in the problem
-- Be concise — no comments, no explanations, just working code
-- Output ONLY the Python code, nothing else (no markdown, no backticks)
+{problem}
 
-PROBLEM:
-{problem}`;
+Python 3 solution (sys.stdin for input, print for output):`;
 
 function buildPrompt(problemStatement: string): string {
   return SOLVER_PROMPT.replace("{problem}", problemStatement);
 }
 
 function cleanResponse(content: string): string {
-  return content
+  let code = content
     .replace(/```(?:python)?\s*/g, "")
     .replace(/```\s*$/g, "")
     .trim();
+
+  // If the model output reasoning before code, find where actual code starts.
+  // Python code starts with: import, from, def, for, while, if, t=, n=, sys, input, #
+  const codeStart = code.search(/^(import |from |def |for |while |if |[a-z_]+ ?=|sys\.|input|#)/m);
+  if (codeStart > 0) {
+    code = code.slice(codeStart);
+  }
+
+  return code.trim();
 }
 
 export async function generateSolution(problemStatement: string): Promise<string> {

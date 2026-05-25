@@ -1,8 +1,11 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BackgroundEffects, Button, GlassPanel, Icon } from "@/components/ui";
 import { Header, Footer } from "@/components/layout";
+import { useAuthStore } from "@/stores";
 
 // Feature card data
 const features = [
@@ -34,6 +37,19 @@ const stats = [
 ];
 
 export default function LandingPage() {
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const initialized = useAuthStore((s) => s.initialized);
+
+  useEffect(() => {
+    if (initialized && user) {
+      router.replace("/arena");
+    }
+  }, [initialized, user, router]);
+
+  // Don't render landing page if user is logged in (will redirect)
+  if (initialized && user) return null;
+
   return (
     <div className="min-h-screen flex flex-col relative overflow-hidden">
       {/* Background Effects */}
