@@ -32,18 +32,40 @@ AlgoWars is a real-time 1v1 competitive programming platform. Two players queue 
 
 ## How a Match Works
 
+### Game Modes
+
+| Mode | Duration | Opponent | Elo Affected | Description |
+|------|----------|----------|--------------|-------------|
+| **Blitz** | 15 min | Real or Bot | Yes | Fast 1v1 — one problem, race to solve |
+| **Classical** | 20 min | Real or Bot | Yes | Longer 1v1 — more time to think |
+| **Against Time** | 8 min | None (solo) | No | Solo practice — you vs the clock |
+
+### Match Flow (Competitive: Blitz / Classical)
+
 ```
-Queue (15s max) → Match Created → Countdown → ACTIVE (10 min) → COMPLETED/ABORTED
+Arena → Select Mode → Queue (15s max) → Matched → ACTIVE → COMPLETED/ABORTED
 ```
 
-1. A player clicks "Find Match." They enter a rating-based queue (matched within ±100 Elo).
+1. A player selects Blitz or Classical on the arena hub. They enter a mode-specific, rating-based queue (matched within ±100 Elo, same mode only).
 2. If a real opponent is found within 15 seconds, they're paired. If not, a phantom bot opponent is assigned (player doesn't know it's a bot).
-3. The server selects a random Codeforces problem from the appropriate rating bracket and starts a 10-minute countdown.
+3. The server selects a random Codeforces problem from the appropriate rating bracket and starts the timer.
 4. Both players see the same problem statement in a Monaco code editor. They write solutions in C++ (17/20), Python 3, Java 17, or PyPy 3.
 5. On submit, the code is sent to Claude (via MegaLLM's OpenAI-compatible API) which analyzes the logic and returns a verdict: ACCEPTED, WRONG_ANSWER, COMPILE_ERROR, RUNTIME_ERROR, or JUDGE_TIMEOUT.
-6. First player to receive ACCEPTED wins. Elo ratings update asymmetrically based on the rating difference.
+6. First player to receive ACCEPTED wins. Elo ratings update asymmetrically based on the rating difference. XP is awarded to both players.
 7. Players can also surrender (instant loss + Elo penalty) or disconnect (10-second grace window before auto-forfeit).
-8. If neither solves it in 10 minutes, the match is aborted with no rating change for either player.
+8. If neither solves it in time, the match is aborted with no rating change (but participation XP is still awarded).
+
+### Match Flow (Solo: Against Time)
+
+```
+Arena → "Against Time" → /solo (instant) → ACTIVE (8 min) → WIN or TIMEOUT
+```
+
+1. Player clicks "Against Time" — no queue, no waiting.
+2. A match is instantly created with a silent bot placeholder (for schema compatibility). The bot never acts.
+3. Player has 8 minutes to solve the problem.
+4. If ACCEPTED → "Victory" screen. If timer expires → "Defeat." No Elo change either way.
+5. XP is still awarded (+10 win, +5 loss).
 
 ---
 
@@ -121,6 +143,49 @@ Where:
 ### Starting Rating
 
 All new accounts start at **1000 Elo**. Bots are seeded between 950-1100.
+
+---
+
+## Experience (XP) System
+
+XP is a **progression metric separate from Elo**. Elo measures skill (goes up and down); XP measures engagement (only goes up). Every completed match awards XP regardless of mode.
+
+### XP Rewards
+
+| Outcome | XP Gained |
+|---------|-----------|
+| Win (ACCEPTED first) | +10 |
+| Loss (opponent won, or surrender) | +5 |
+| Draw (timeout) | +3 |
+| Bot accounts | 0 (exempt) |
+
+### Rank Progression (Japanese Warrior Theme)
+
+| Rank | XP Range | Flavor |
+|------|----------|--------|
+| **Ashigaru** | 0–99 | Foot soldier, beginner |
+| **Shinobi** | 100–249 | Stealthy learner |
+| **Rōnin** | 250–499 | Wandering warrior |
+| **Hatamoto** | 500–999 | Trusted bannerman |
+| **Shōgun** | 1000+ | Supreme commander |
+
+### Implementation
+
+- `src/services/xp.ts` — `awardXP(userId, result)`, `getRankFromXP(xp)`, `getXPProgressToNextRank(xp)`
+- `frontend/src/lib/xp.ts` — client-side mirror for display (same rank thresholds)
+- XP stored in `user_stats.xp` column (integer, default 0)
+- Awarded server-side in `match-engine.ts` on every terminal match path (processVerdict, forfeit, abort)
+- Bots are exempt (same `isBot` check as Elo)
+- Arena sidebar shows current rank, XP count, and progress bar to next rank
+- Results page shows "+X XP" earned from the match
+
+### Design Principles
+
+- XP **only goes up** — losing still earns XP, preventing frustration
+- Awards are server-side only — can't be faked client-side
+- Timeout gives minimal XP (3) — prevents AFK farming
+- Rank is computed from XP (no separate rank column) — single source of truth
+- System is extensible: seasonal boosts, quests, cosmetics can be layered on top
 
 ---
 
