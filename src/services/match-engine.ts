@@ -15,6 +15,7 @@ import { logger } from "../lib/logger";
 import { MutexManager } from "../lib/mutex";
 import { socketEmit } from "../socket";
 import { botEngine } from "./bot-engine";
+import { awardXP } from "./xp";
 
 // Elo rating calculation (K=32, standard formula).
 // Beating a stronger player earns more; beating a weaker player earns less.
@@ -97,6 +98,21 @@ function buildStatsUpdate(result: "WON" | "LOST" | "DRAW", newRating: number) {
       ? sql`GREATEST(${userStats.maxStreak}, ${userStats.winStreak} + 1)`
       : userStats.maxStreak,
   };
+}
+
+async function handleAbortUpdates(
+  match: { status: string; mode: string; players: Array<{ userId: string }> },
+  matchId: string,
+): Promise<void> {
+  if (match.status !== "ACTIVE") return;
+  for (const player of match.players) {
+    if (match.mode !== "TIMED") {
+      await updatePlayerRating(player.userId, matchId, "DRAW", 0);
+    }
+    if (!(await isBot(player.userId))) {
+      await awardXP(player.userId, "DRAW");
+    }
+  }
 }
 
 async function isBot(userId: string): Promise<boolean> {
@@ -272,6 +288,14 @@ export const matchEngine = {
         await updatePlayerRating(winner.userId, matchId, "WON", delta);
         await updatePlayerRating(loser.userId, matchId, "LOST", -delta);
       }
+
+      // Award XP to both players (all modes including TIMED)
+      for (const p of match.players) {
+        if (!(await isBot(p.userId))) {
+          await awardXP(p.userId, p.userId === userId ? "WON" : "LOST");
+        }
+      }
+
       for (const p of match.players) socketEmit.clearUserMatch(p.userId);
 
       botEngine.cancel(matchId);
@@ -344,6 +368,14 @@ export const matchEngine = {
           await updatePlayerRating(loserPlayer.userId, matchId, "LOST", -delta);
         }
       }
+
+      // Award XP (loser still gets participation XP)
+      for (const p of match.players) {
+        if (!(await isBot(p.userId))) {
+          await awardXP(p.userId, p.userId === opponent.userId ? "WON" : "LOST");
+        }
+      }
+
       for (const p of match.players) socketEmit.clearUserMatch(p.userId);
 
       botEngine.cancel(matchId);
@@ -388,13 +420,10 @@ export const matchEngine = {
         .set({ status: "ABORTED", endedAt: new Date() })
         .where(eq(matches.id, matchId));
 
-      // Abort/timeout: record draw for competitive modes, skip entirely for TIMED (solo).
-      for (const player of match.players) {
-        if (match.status === "ACTIVE" && match.mode !== "TIMED") {
-          await updatePlayerRating(player.userId, matchId, "DRAW", 0);
-        }
-        socketEmit.clearUserMatch(player.userId);
-      }
+      // Abort/timeout: record draw for competitive modes, skip rating for TIMED.
+      // Award participation XP to real players regardless of mode.
+      await handleAbortUpdates(match, matchId);
+      for (const p of match.players) socketEmit.clearUserMatch(p.userId);
 
       botEngine.cancel(matchId);
       socketEmit.matchEnd(matchId, { winnerId: null, reason });

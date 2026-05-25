@@ -5,6 +5,7 @@ import Link from "next/link";
 import { GlassPanel, Button, Icon } from "@/components/ui";
 import { useUser } from "@/stores";
 import { calculateWinRate, formatRatingChange } from "@/lib/utils";
+import { getRankFromXP, getXPProgress } from "@/lib/xp";
 import { usersApi, matchesApi, ApiClientError } from "@/lib/api";
 import type { Match, MatchHistoryEntry } from "@/lib/api/types";
 
@@ -89,10 +90,16 @@ export default function ProfilePage() {
 
               {/* Quick Stats */}
               <div className="flex flex-wrap justify-center md:justify-start gap-4">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
+                  <Icon name="military_tech" size={16} className="text-primary" />
+                  <span className="text-sm font-bold text-primary font-mono">
+                    {getRankFromXP(stats?.xp ?? 0).name}
+                  </span>
+                </div>
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
                   <Icon name="bolt" size={16} className="text-primary" />
                   <span className="text-sm font-bold text-white font-mono">
-                    {stats?.rating ?? 1200}
+                    {stats?.rating ?? 1000}
                   </span>
                   <span className="text-xs text-text-muted">ELO</span>
                 </div>
@@ -156,6 +163,45 @@ export default function ProfilePage() {
           </div>
         </GlassPanel>
       </div>
+
+      {/* XP / Rank Progress */}
+      <GlassPanel padding="p-6" className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-white uppercase tracking-wide">
+            Experience
+          </h2>
+          <span className="text-xs font-japanese text-primary">経験値</span>
+        </div>
+        <div className="flex items-center gap-6 mb-4">
+          <div className="size-14 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center">
+            <Icon name="military_tech" size={28} className="text-primary" />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-baseline gap-2 mb-1">
+              <span className="text-xl font-black text-white uppercase">
+                {getRankFromXP(stats?.xp ?? 0).name}
+              </span>
+              <span className="text-xs text-text-muted font-mono">
+                {stats?.xp ?? 0} XP
+              </span>
+            </div>
+            <div className="h-2.5 bg-white/5 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-primary to-orange-500 rounded-full transition-all"
+                style={{ width: `${getXPProgress(stats?.xp ?? 0).percentage}%` }}
+              />
+            </div>
+            {getRankFromXP(stats?.xp ?? 0).maxXp !== Infinity && (
+              <p className="text-[10px] text-text-muted mt-1">
+                {getRankFromXP(stats?.xp ?? 0).maxXp + 1 - (stats?.xp ?? 0)} XP to{" "}
+                <span className="text-white font-semibold">
+                  {getRankFromXP(getRankFromXP(stats?.xp ?? 0).maxXp + 1).name}
+                </span>
+              </p>
+            )}
+          </div>
+        </div>
+      </GlassPanel>
 
       {/* W/L/D Breakdown */}
       <GlassPanel padding="p-6" className="mb-8">

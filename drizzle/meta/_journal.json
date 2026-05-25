@@ -43,6 +43,13 @@
       "when": 1779703330300,
       "tag": "0005_premium_mephistopheles",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779732094867,
+      "tag": "0006_futuristic_bulldozer",
+      "breakpoints": true
     }
   ]
 }

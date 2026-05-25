@@ -6,6 +6,7 @@ import Link from "next/link";
 import { GlassPanel, Button, Icon } from "@/components/ui";
 import { useUser, useAuthStore } from "@/stores";
 import { formatRatingChange } from "@/lib/utils";
+import { getRankFromXP, getXPProgress } from "@/lib/xp";
 import { matchesApi, ApiClientError } from "@/lib/api";
 import type { Match } from "@/lib/api/types";
 
@@ -227,7 +228,11 @@ export default function ResultsPage() {
                   : "text-yellow-400"
             }`}
           >
-            {formatRatingChange(animatedRating)}
+            {isSoloMode ? "—" : formatRatingChange(animatedRating)}
+          </div>
+          {/* XP gained */}
+          <div className="mt-2 text-xs text-primary font-bold">
+            +{isWinner ? 10 : isDraw ? 3 : 5} XP
           </div>
           <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-center gap-4">
             <div className="text-center">
@@ -250,6 +255,36 @@ export default function ResultsPage() {
             </div>
           </div>
         </GlassPanel>
+
+        {/* XP Progress Card */}
+        {user?.stats && (
+          <div className="w-full max-w-md mb-8">
+            <GlassPanel padding="p-4" className="border border-primary/20">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Icon name="military_tech" size={18} className="text-primary" />
+                  <span className="text-xs font-bold text-white uppercase tracking-wide">
+                    {getRankFromXP(user.stats.xp).name}
+                  </span>
+                </div>
+                <span className="text-xs text-text-muted font-mono">
+                  {user.stats.xp} XP
+                </span>
+              </div>
+              <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-primary to-orange-500 rounded-full transition-all"
+                  style={{ width: `${getXPProgress(user.stats.xp).percentage}%` }}
+                />
+              </div>
+              {getRankFromXP(user.stats.xp).maxXp !== Infinity && (
+                <p className="text-[9px] text-text-muted mt-1.5 text-center">
+                  {getRankFromXP(user.stats.xp).maxXp + 1 - user.stats.xp} XP to next rank
+                </p>
+              )}
+            </GlassPanel>
+          </div>
+        )}
 
         {/* Match Summary */}
         {opponentPlayer && (

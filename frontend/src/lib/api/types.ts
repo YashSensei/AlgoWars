@@ -7,6 +7,7 @@ export interface UserStats {
   id: string;
   userId: string;
   rating: number;
+  xp: number;
   wins: number;
   losses: number;
   draws: number;

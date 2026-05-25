@@ -62,6 +62,7 @@ export const userStats = pgTable("user_stats", {
     .unique()
     .references(() => users.id, { onDelete: "cascade" }),
   rating: integer("rating").default(1000).notNull(),
+  xp: integer("xp").default(0).notNull(),
   wins: integer("wins").default(0).notNull(),
   losses: integer("losses").default(0).notNull(),
   draws: integer("draws").default(0).notNull(),

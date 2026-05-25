@@ -4,6 +4,7 @@ import Link from "next/link";
 import { GlassPanel, Icon } from "@/components/ui";
 import { useUser } from "@/stores";
 import { calculateWinRate } from "@/lib/utils";
+import { getRankFromXP, getXPProgress } from "@/lib/xp";
 
 interface GameMode {
   title: string;
@@ -76,6 +77,9 @@ export default function ArenaPage() {
   const stats = user?.stats;
   const totalMatches = (stats?.wins ?? 0) + (stats?.losses ?? 0) + (stats?.draws ?? 0);
   const winRate = calculateWinRate(stats?.wins ?? 0, totalMatches);
+  const xp = stats?.xp ?? 0;
+  const rank = getRankFromXP(xp);
+  const xpProgress = getXPProgress(xp);
 
   return (
     <div className="w-full max-w-[1400px] mx-auto px-4 py-6 flex flex-col gap-6">
@@ -90,20 +94,28 @@ export default function ArenaPage() {
             <h2 className="text-2xl font-black text-white uppercase tracking-tight">
               {user?.username ?? "Warrior"}
             </h2>
-            <p className="text-xs text-text-muted uppercase tracking-widest mt-1 font-mono">
-              Rating: {stats?.rating ?? 1000}
+            <p className="text-xs text-primary uppercase tracking-widest mt-1 font-bold">
+              {rank.name}
+            </p>
+            <p className="text-[10px] text-text-muted font-mono mt-0.5">
+              {xp} XP • Rating {stats?.rating ?? 1000}
             </p>
             <div className="mt-4">
               <div className="flex items-center justify-between text-[10px] text-text-muted uppercase tracking-widest mb-1.5">
-                <span>Progress</span>
-                <span>{Math.min(100, Math.round(((stats?.rating ?? 1000) - 800) / 4))}%</span>
+                <span>XP Progress</span>
+                <span>{xpProgress.percentage}%</span>
               </div>
               <div className="h-2 bg-white/5 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-primary to-orange-500 rounded-full transition-all"
-                  style={{ width: `${Math.min(100, ((stats?.rating ?? 1000) - 800) / 4)}%` }}
+                  style={{ width: `${xpProgress.percentage}%` }}
                 />
               </div>
+              {rank.maxXp !== Infinity && (
+                <p className="text-[9px] text-text-muted mt-1 text-center">
+                  {rank.maxXp + 1 - xp} XP to next rank
+                </p>
+              )}
             </div>
           </GlassPanel>
 

@@ -1,0 +1,1 @@
+ALTER TABLE "user_stats" ADD COLUMN "xp" integer DEFAULT 0 NOT NULL;
