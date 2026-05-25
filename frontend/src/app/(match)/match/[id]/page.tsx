@@ -27,6 +27,103 @@ const LANGUAGES: { value: Language; label: string }[] = [
   { value: "pypy3", label: "PyPy 3" },
 ];
 
+function formatProblemStatement(raw: string): string {
+  // Strip the metadata header block (title, time/memory limits, input/output source)
+  const cleaned = raw.replace(
+    /^[A-Z]\d*\..*?\n(?:time limit per test\n.*?\n)?(?:memory limit per test\n.*?\n)?(?:input\n.*?\n)?(?:output\n.*?\n)?/i,
+    "",
+  );
+
+  let text = cleaned.trim();
+
+  // Escape HTML
+  text = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  // LaTeX text commands — extract content, discard formatting commands
+  text = text
+    .replace(/\\texttt\{([^}]*)\}/g, '<code class="px-1 py-0.5 bg-white/10 rounded text-[13px] font-mono">$1</code>')
+    .replace(/\\textbf\{([^}]*)\}/g, "<strong>$1</strong>")
+    .replace(/\\textit\{([^}]*)\}/g, "<em>$1</em>")
+    .replace(/\\text\{([^}]*)\}/g, "$1")
+    .replace(/\\mathtt\{([^}]*)\}/g, '<code class="px-1 py-0.5 bg-white/10 rounded text-[13px] font-mono">$1</code>')
+    .replace(/\\mathrm\{([^}]*)\}/g, "$1")
+    .replace(/\\operatorname\{([^}]+)\}/g, "$1")
+    .replace(/\\color\{[^}]*\}\{([^}]*)\}/g, "$1")
+    .replace(/\\color\{[^}]*\}/g, "");
+
+  // Math symbols
+  text = text
+    .replace(/\\min/g, "min")
+    .replace(/\\max/g, "max")
+    .replace(/\\gcd/g, "gcd")
+    .replace(/\\rightarrow/g, "→")
+    .replace(/\\leftarrow/g, "←")
+    .replace(/\\Rightarrow/g, "⇒")
+    .replace(/\\Leftarrow/g, "⇐")
+    .replace(/\\leftrightarrow/g, "↔")
+    .replace(/\\le\b|\\leq\b/g, "≤")
+    .replace(/\\ge\b|\\geq\b/g, "≥")
+    .replace(/\\ne\b|\\neq\b/g, "≠")
+    .replace(/\\ldots|\\dots/g, "…")
+    .replace(/\\cdots/g, "⋯")
+    .replace(/\\cdot/g, "·")
+    .replace(/\\times/g, "×")
+    .replace(/\\infty/g, "∞")
+    .replace(/\\pm/g, "±")
+    .replace(/\\sum/g, "Σ")
+    .replace(/\\prod/g, "Π")
+    .replace(/\\sqrt/g, "√")
+    .replace(/\\lfloor/g, "⌊")
+    .replace(/\\rfloor/g, "⌋")
+    .replace(/\\lceil/g, "⌈")
+    .replace(/\\rceil/g, "⌉")
+    .replace(/\\cap/g, "∩")
+    .replace(/\\cup/g, "∪")
+    .replace(/\\in\b/g, "∈")
+    .replace(/\\subset/g, "⊂")
+    .replace(/\\oplus/g, "⊕")
+    .replace(/\\bmod/g, "mod")
+    .replace(/\\mod/g, "mod")
+    .replace(/\\quad/g, " ")
+    .replace(/\\;|\\,/g, " ")
+    .replace(/\\\\/g, "")
+    .replace(/\^(\d)/g, "<sup>$1</sup>")
+    .replace(/\^{([^}]+)}/g, "<sup>$1</sup>")
+    .replace(/_(\d)/g, "<sub>$1</sub>")
+    .replace(/_{([^}]+)}/g, "<sub>$1</sub>");
+
+  // Markdown bold
+  text = text.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+  // Example input/output blocks — wrap in code-block style containers
+  // Detect patterns like "Input:\n<numbers>\nOutput:\n<numbers>" inside Examples section
+  text = text.replace(
+    /\n(Input:\n)([\s\S]*?)(?=\nOutput:)/g,
+    '\n<div class="mt-2 mb-1 text-[11px] text-white/50 uppercase tracking-wider font-semibold">Input</div><pre class="bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-green-300 font-mono overflow-x-auto mb-2">$2</pre>',
+  );
+  text = text.replace(
+    /\n(Output:\n)([\s\S]*?)(?=\n\n|\nExample|\n$|$)/g,
+    '\n<div class="mt-2 mb-1 text-[11px] text-white/50 uppercase tracking-wider font-semibold">Output</div><pre class="bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-[13px] text-blue-300 font-mono overflow-x-auto mb-3">$2</pre>',
+  );
+
+  // Section headings
+  text = text.replace(
+    /^(Input|Output|Note|Examples?)\s*:?\s*$/gm,
+    '<h4 class="text-white font-bold text-[13px] uppercase tracking-wide mt-6 mb-3 pb-1.5 border-b border-white/10">$1</h4>',
+  );
+  text = text.replace(
+    /\n(Example \d+:?)/g,
+    '\n<div class="text-primary font-bold text-xs uppercase tracking-wider mt-5 mb-2">$1</div>',
+  );
+
+  // Paragraphs and line breaks
+  text = text.replace(/\n\n+/g, '</p><p class="mb-3">');
+  text = text.replace(/\n/g, "<br />");
+
+  return `<div class="problem-content text-white/80 leading-7 text-[14px]"><p class="mb-3">${text}</p></div>`;
+}
+
+
 export default function MatchPage() {
   const params = useParams();
   const router = useRouter();
@@ -67,7 +164,11 @@ export default function MatchPage() {
         const opponentPlayer = matchData.players.find((p) => p.user.id !== user?.id);
         if (opponentPlayer) {
           setOpponent(opponentPlayer.user);
-          addLog(`Matched against ${opponentPlayer.user.username}`, "info");
+          if (matchData.mode === "TIMED") {
+            addLog("Solo challenge started", "info");
+          } else {
+            addLog(`Matched against ${opponentPlayer.user.username}`, "info");
+          }
         }
         // If match is still pre-active, trigger the transition, then re-read the
         // authoritative startedAt so both clients share the same end time and
@@ -271,22 +372,29 @@ export default function MatchPage() {
           </span>
         </div>
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <div className="size-7 rounded bg-red-500/10 flex items-center justify-center">
-              <Icon name="person" size={16} className="text-red-400" />
+          {match?.mode === "TIMED" ? (
+            <div className="flex items-center gap-2 text-xs">
+              <Icon name="timer" size={16} className="text-primary" />
+              <span className="text-white font-medium uppercase">Solo Challenge</span>
             </div>
-            <div className="text-xs">
-              <div className="text-white font-medium">{opponent?.username ?? "Opponent"}</div>
-              <div className={`flex items-center gap-1 ${
-                opponentStatus === "coding" ? "text-blue-400" :
-                opponentStatus === "accepted" ? "text-green-400" :
-                opponentStatus === "disconnected" ? "text-gray-400" : "text-yellow-400"
-              }`}>
-                <span className="size-1.5 rounded-full bg-current animate-pulse" />
-                <span>{opponentStatus === "coding" ? "Coding" : opponentStatus === "accepted" ? "Solved!" : opponentStatus === "disconnected" ? "Offline" : "Judging"}</span>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="size-7 rounded bg-red-500/10 flex items-center justify-center">
+                <Icon name="person" size={16} className="text-red-400" />
+              </div>
+              <div className="text-xs">
+                <div className="text-white font-medium">{opponent?.username ?? "Opponent"}</div>
+                <div className={`flex items-center gap-1 ${
+                  opponentStatus === "coding" ? "text-blue-400" :
+                  opponentStatus === "accepted" ? "text-green-400" :
+                  opponentStatus === "disconnected" ? "text-gray-400" : "text-yellow-400"
+                }`}>
+                  <span className="size-1.5 rounded-full bg-current animate-pulse" />
+                  <span>{opponentStatus === "coding" ? "Coding" : opponentStatus === "accepted" ? "Solved!" : opponentStatus === "disconnected" ? "Offline" : "Judging"}</span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
@@ -302,10 +410,19 @@ export default function MatchPage() {
                   <span className="text-xs font-semibold uppercase tracking-wide">Problem</span>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-4">
-                <div className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">
-                  {match?.problem.statement ?? "Loading problem statement..."}
-                </div>
+              <div className="flex-1 overflow-y-auto p-5">
+                {/* Problem title */}
+                <h2 className="text-lg font-bold text-white mb-4 pb-3 border-b border-border-dark">
+                  {match?.problem.title ?? "Loading..."}
+                </h2>
+                <div
+                  className="problem-statement"
+                  dangerouslySetInnerHTML={{
+                    __html: formatProblemStatement(
+                      match?.problem.statement ?? "Loading problem statement...",
+                    ),
+                  }}
+                />
                 <div className="mt-6 pt-4 border-t border-border-dark">
                   <h3 className="text-xs font-bold text-text-muted uppercase mb-3 tracking-wide">Constraints</h3>
                   <div className="space-y-2 text-xs text-white/70">
@@ -367,7 +484,7 @@ export default function MatchPage() {
                       )}
                       <span className="text-xs text-text-muted">
                         Submissions: {submissions.length}
-                        {opponentSubmissions > 0 && <span className="text-red-400 ml-2">| Opponent: {opponentSubmissions}</span>}
+                        {match?.mode !== "TIMED" && opponentSubmissions > 0 && <span className="text-red-400 ml-2">| Opponent: {opponentSubmissions}</span>}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">

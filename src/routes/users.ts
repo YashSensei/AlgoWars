@@ -121,7 +121,7 @@ userRoutes.get("/me/matches", authMiddleware, async (c) => {
     offset,
     with: {
       match: {
-        columns: { id: true, status: true, startedAt: true, endedAt: true },
+        columns: { id: true, status: true, mode: true, startedAt: true, endedAt: true },
         with: {
           problem: { columns: { id: true, title: true, difficulty: true } },
           players: {
@@ -167,6 +167,7 @@ function buildHistoryEntry(mp: MatchPlayerWithMatch, myId: string, acceptedMatch
 
   return {
     matchId: mp.match.id,
+    mode: mp.match.mode,
     problem: mp.match.problem,
     opponent: opponent?.user ?? null,
     opponentRating: opponent?.ratingBefore ?? null,
@@ -182,6 +183,7 @@ type MatchPlayerWithMatch = {
   match: {
     id: string;
     status: string;
+    mode: string;
     startedAt: Date | null;
     endedAt: Date | null;
     problem: { id: string; title: string; difficulty: number | null } | null;

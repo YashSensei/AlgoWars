@@ -35,7 +35,7 @@ export function Header({ sticky = true, showBorder = true, className }: HeaderPr
       )}
     >
       {/* Logo */}
-      <Link href="/">
+      <Link href="/arena">
         <Logo size="md" showSubtitle />
       </Link>
 

@@ -14,7 +14,7 @@ export const matchesApi = {
    * Join the matchmaking queue
    * Returns status: "queued" or "matched"
    */
-  joinQueue: () => api.post<QueueResponse>("/matches/queue"),
+  joinQueue: (mode?: string) => api.post<QueueResponse>("/matches/queue", { mode: mode ?? "blitz" }),
 
   /**
    * Leave the matchmaking queue

@@ -39,15 +39,24 @@ function handleMatchmakingError(err: unknown): never {
   throw err;
 }
 
+const MODE_DURATIONS: Record<string, number> = {
+  blitz: 900, // 15 minutes
+  classical: 1200, // 20 minutes
+  timed: 480, // 8 minutes (solo against the clock)
+};
+
 /**
  * POST /matches/queue
- * Join the matchmaking queue
+ * Join the matchmaking queue. Accepts optional `mode` in body to set match duration.
  */
 matchRoutes.post("/queue", async (c) => {
   const user = c.get("user");
+  const body = await c.req.json().catch(() => ({}));
+  const mode = typeof body.mode === "string" ? body.mode : "blitz";
+  const duration = MODE_DURATIONS[mode] ?? 900;
 
   try {
-    const result = await matchmaking.join(user.id);
+    const result = await matchmaking.join(user.id, duration);
     const status = result.status === "matched" ? 201 : 200;
     return c.json(result, status);
   } catch (err) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button, GlassPanel, Icon } from "@/components/ui";
 import { useUser } from "@/stores";
 import { formatTime } from "@/lib/utils";
@@ -13,6 +13,8 @@ type QueueState = "joining" | "searching" | "matched" | "countdown" | "error";
 
 export default function QueuePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const mode = searchParams.get("mode") ?? "blitz";
   const user = useUser();
 
   // Queue state
@@ -22,7 +24,14 @@ export default function QueuePage() {
 
   // Match found state
   const [matchId, setMatchId] = useState<string | null>(null);
-  const [opponent, setOpponent] = useState<{ id: string; username: string } | null>(null);
+  const [opponent, setOpponent] = useState<{
+    id: string;
+    username: string;
+    rating: number;
+    wins: number;
+    losses: number;
+    winStreak: number;
+  } | null>(null);
   const [countdown, setCountdown] = useState<number>(5);
 
   // Ref to track current matchId for socket callbacks
@@ -60,16 +69,20 @@ export default function QueuePage() {
         if (!mounted) return;
 
         // Now join queue via REST API
-        const response = await matchesApi.joinQueue();
+        const response = await matchesApi.joinQueue(mode);
 
         if (!mounted) return;
 
         if (response.status === "matched") {
-          // Immediately matched!
+          // Immediately matched — full stats arrive via socket event shortly after
           setMatchId(response.matchId!);
           setOpponent({
             id: response.opponentId!,
             username: response.opponentName!,
+            rating: 0,
+            wins: 0,
+            losses: 0,
+            winStreak: 0,
           });
           setQueueState("matched");
         } else if (response.status === "already_in_match") {
@@ -302,7 +315,6 @@ export default function QueuePage() {
           {/* Opponent Card */}
           <div className="flex justify-center lg:justify-start">
             {opponent ? (
-              // Opponent found
               <GlassPanel
                 showCornerAccents
                 padding="p-6"
@@ -314,16 +326,48 @@ export default function QueuePage() {
                     <Icon name="person" size={48} className="text-red-400" />
                   </div>
 
-                  {/* Name */}
+                  {/* Name & Rating */}
                   <div className="flex flex-col items-center">
                     <span className="text-xl font-bold text-white uppercase">
                       {opponent.username}
                     </span>
-                    <span className="text-sm text-text-muted font-mono">Opponent</span>
+                    <span className="text-sm text-text-muted font-mono">
+                      Rating: {opponent.rating || "???"}
+                    </span>
+                  </div>
+
+                  {/* Stats Grid */}
+                  <div className="w-full grid grid-cols-3 gap-2">
+                    <div className="p-2 bg-white/5 rounded-lg border border-white/5 text-center">
+                      <div className="text-sm font-bold text-white font-mono">
+                        {opponent.wins + opponent.losses > 0
+                          ? Math.round((opponent.wins / (opponent.wins + opponent.losses)) * 100)
+                          : 0}%
+                      </div>
+                      <div className="text-[9px] text-text-muted uppercase tracking-widest">
+                        Win %
+                      </div>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-lg border border-white/5 text-center">
+                      <div className="text-sm font-bold text-white font-mono">
+                        {opponent.wins + opponent.losses}
+                      </div>
+                      <div className="text-[9px] text-text-muted uppercase tracking-widest">
+                        Matches
+                      </div>
+                    </div>
+                    <div className="p-2 bg-white/5 rounded-lg border border-white/5 text-center">
+                      <div className="text-sm font-bold text-orange-400 font-mono">
+                        {opponent.winStreak}
+                      </div>
+                      <div className="text-[9px] text-text-muted uppercase tracking-widest">
+                        Streak
+                      </div>
+                    </div>
                   </div>
 
                   {/* Matched indicator */}
-                  <div className="flex items-center gap-2 text-green-400 text-sm mt-2">
+                  <div className="flex items-center gap-2 text-green-400 text-sm mt-1">
                     <Icon name="check_circle" size={16} />
                     <span className="uppercase tracking-wide font-bold">Matched!</span>
                   </div>
