@@ -232,11 +232,26 @@ export function setupSocketIO(httpServer: HTTPServer): Server {
 export const socketEmit = {
   queueMatched(
     userId: string,
-    data: { matchId: string; opponentId: string; opponentName: string },
+    data: {
+      matchId: string;
+      opponentId: string;
+      opponentName: string;
+      opponentRating: number;
+      opponentWins: number;
+      opponentLosses: number;
+      opponentWinStreak: number;
+    },
   ) {
     safeEmit(`user:${userId}`, SOCKET_EVENTS.QUEUE_MATCHED, {
       matchId: data.matchId,
-      opponent: { id: data.opponentId, username: data.opponentName },
+      opponent: {
+        id: data.opponentId,
+        username: data.opponentName,
+        rating: data.opponentRating,
+        wins: data.opponentWins,
+        losses: data.opponentLosses,
+        winStreak: data.opponentWinStreak,
+      },
     });
   },
 

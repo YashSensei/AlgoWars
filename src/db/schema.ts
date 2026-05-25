@@ -16,7 +16,7 @@ import {
 // ============================================
 
 export const userRoleEnum = pgEnum("user_role", ["USER", "ADMIN"]);
-export const gameModeEnum = pgEnum("game_mode", ["BLITZ"]);
+export const gameModeEnum = pgEnum("game_mode", ["BLITZ", "CLASSICAL", "TIMED"]);
 export const matchStatusEnum = pgEnum("match_status", [
   "WAITING",
   "STARTING",

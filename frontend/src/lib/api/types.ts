@@ -111,6 +111,7 @@ export interface MatchPlayer {
 // Match from matches table
 export interface Match {
   id: string;
+  mode: "BLITZ" | "CLASSICAL" | "TIMED";
   status: MatchStatus;
   duration: number; // seconds
   startedAt?: string;
@@ -192,6 +193,7 @@ export interface LeaderboardResponse {
 // Match history entry (from GET /users/me/matches)
 export interface MatchHistoryEntry {
   matchId: string;
+  mode: "BLITZ" | "CLASSICAL" | "TIMED";
   problem: {
     id: string;
     title: string;
@@ -224,6 +226,10 @@ export interface QueueMatchedEvent {
   opponent: {
     id: string;
     username: string;
+    rating: number;
+    wins: number;
+    losses: number;
+    winStreak: number;
   };
 }
 

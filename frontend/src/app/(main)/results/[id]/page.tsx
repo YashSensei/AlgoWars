@@ -65,9 +65,12 @@ export default function ResultsPage() {
 
   const isWinner = winnerId === user?.id || myPlayer?.result === "WON";
   const isDraw = myPlayer?.result === "DRAW";
-  const ratingChange = myPlayer?.ratingAfter && myPlayer?.ratingBefore
-    ? myPlayer.ratingAfter - myPlayer.ratingBefore
-    : isWinner ? 5 : isDraw ? 0 : -5;
+  const isSoloMode = match?.mode === "TIMED";
+  const ratingChange = isSoloMode
+    ? 0
+    : myPlayer?.ratingAfter && myPlayer?.ratingBefore
+      ? myPlayer.ratingAfter - myPlayer.ratingBefore
+      : isWinner ? 5 : isDraw ? 0 : -5;
 
   // Detect forfeit: match completed with a winner, but nobody got ACCEPTED.
   // In that case the losing player is the one who surrendered.

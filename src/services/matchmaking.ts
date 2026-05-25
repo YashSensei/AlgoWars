@@ -15,12 +15,14 @@ import { botEngine } from "./bot-engine";
 import { fetchAndSaveStatement } from "./problem-fetcher";
 
 const RATING_RANGE = 100;
-const BOT_FALLBACK_MS = 15_000; // Pair with bot after 15s with no real opponent
+const BOT_FALLBACK_MS = 15_000;
+const SOLO_TIMED_DURATION = 480; // "Against Time" mode — solo, 8 minutes
 
 interface QueuedPlayer {
   userId: string;
   rating: number;
   joinedAt: number;
+  duration: number;
 }
 
 // In-memory queue
@@ -39,10 +41,11 @@ function getRatingBucket(rating: number): string {
   return "1400-1599";
 }
 
-// Find a matching opponent within rating range
+// Find a matching opponent within rating range AND same game mode (duration)
 function findMatch(player: QueuedPlayer): QueuedPlayer | null {
   for (const [userId, opponent] of queue) {
     if (userId === player.userId) continue;
+    if (opponent.duration !== player.duration) continue;
     if (Math.abs(opponent.rating - player.rating) <= RATING_RANGE) {
       return opponent;
     }
@@ -66,15 +69,34 @@ async function selectProblem(avgRating: number): Promise<string | null> {
   return fetched ? row.id : null;
 }
 
-// Notify both players about the match
+function buildMatchedPayload(
+  matchId: string,
+  opponentId: string,
+  username: string | undefined,
+  stats: { rating: number; wins: number; losses: number; winStreak: number } | undefined,
+  fallbackRating: number,
+) {
+  return {
+    matchId,
+    opponentId,
+    opponentName: username ?? "Opponent",
+    opponentRating: stats?.rating ?? fallbackRating,
+    opponentWins: stats?.wins ?? 0,
+    opponentLosses: stats?.losses ?? 0,
+    opponentWinStreak: stats?.winStreak ?? 0,
+  };
+}
+
 async function notifyMatchedPlayers(
   matchId: string,
   p1: QueuedPlayer,
   p2: QueuedPlayer,
 ): Promise<void> {
-  const [user1, user2] = await Promise.all([
+  const [user1, user2, stats1, stats2] = await Promise.all([
     db.query.users.findFirst({ where: eq(users.id, p1.userId), columns: { username: true } }),
     db.query.users.findFirst({ where: eq(users.id, p2.userId), columns: { username: true } }),
+    db.query.userStats.findFirst({ where: eq(userStats.userId, p1.userId) }),
+    db.query.userStats.findFirst({ where: eq(userStats.userId, p2.userId) }),
   ]);
 
   logger.info("Matchmaking", `Match created: ${matchId.slice(0, 8)}`, {
@@ -82,20 +104,26 @@ async function notifyMatchedPlayers(
     player2: `${user2?.username} (${p2.rating})`,
   });
 
-  socketEmit.queueMatched(p1.userId, {
-    matchId,
-    opponentId: p2.userId,
-    opponentName: user2?.username ?? "Opponent",
-  });
-  socketEmit.queueMatched(p2.userId, {
-    matchId,
-    opponentId: p1.userId,
-    opponentName: user1?.username ?? "Opponent",
-  });
+  socketEmit.queueMatched(
+    p1.userId,
+    buildMatchedPayload(matchId, p2.userId, user2?.username ?? undefined, stats2, p2.rating),
+  );
+  socketEmit.queueMatched(
+    p2.userId,
+    buildMatchedPayload(matchId, p1.userId, user1?.username ?? undefined, stats1, p1.rating),
+  );
 }
 
+type GameMode = "BLITZ" | "CLASSICAL" | "TIMED";
+
+const DURATION_TO_MODE: Record<number, GameMode> = {
+  900: "BLITZ",
+  1200: "CLASSICAL",
+  480: "TIMED",
+};
+
 // Create match with two players — atomic: if either INSERT fails, both roll back.
-async function createMatch(p1: QueuedPlayer, p2: QueuedPlayer): Promise<string> {
+async function createMatch(p1: QueuedPlayer, p2: QueuedPlayer, duration = 900): Promise<string> {
   const avgRating = Math.round((p1.rating + p2.rating) / 2);
   const problemId = await selectProblem(avgRating);
 
@@ -104,10 +132,12 @@ async function createMatch(p1: QueuedPlayer, p2: QueuedPlayer): Promise<string> 
     throw new Error("No problems available for this rating bracket");
   }
 
+  const mode = DURATION_TO_MODE[duration] ?? "BLITZ";
+
   const matchId = await db.transaction(async (tx) => {
     const result = await tx
       .insert(matches)
-      .values({ problemId, status: "STARTING" })
+      .values({ problemId, status: "STARTING", duration, mode })
       .returning({ id: matches.id });
     const id = result[0]?.id;
     if (!id) throw new Error("Failed to create match");
@@ -148,10 +178,12 @@ async function selectRandomBot(rating: number): Promise<QueuedPlayer | null> {
   const stats = await db.query.userStats.findFirst({
     where: eq(userStats.userId, bot.id),
   });
-  return { userId: bot.id, rating: stats?.rating ?? rating, joinedAt: Date.now() };
+  return { userId: bot.id, rating: stats?.rating ?? rating, joinedAt: Date.now(), duration: 900 };
 }
 
-// Pair a queued player with a bot, create the match, start bot engine
+// Pair a queued player with a bot, create the match, start bot engine.
+// The entire operation (queue removal + match creation) runs inside the mutex to prevent
+// a second tab from slipping through hasActiveMatch between removal and DB commit.
 async function matchWithBot(player: QueuedPlayer): Promise<void> {
   const bot = await selectRandomBot(player.rating);
   if (!bot) {
@@ -159,19 +191,20 @@ async function matchWithBot(player: QueuedPlayer): Promise<void> {
     return;
   }
 
-  await queueMutex.withLock(async () => {
-    // Player might have already been matched by a real user or left
-    if (!queue.has(player.userId)) return;
+  const matchId = await queueMutex.withLock(async () => {
+    if (!queue.has(player.userId)) return null;
     queue.delete(player.userId);
     socketEmit.trackQueueLeave(player.userId);
+
+    logger.info(
+      "Matchmaking",
+      `Bot match for ${player.userId.slice(0, 8)} vs bot ${bot.userId.slice(0, 8)}`,
+    );
+    return createMatch(player, bot, player.duration);
   });
 
-  logger.info(
-    "Matchmaking",
-    `Bot match for ${player.userId.slice(0, 8)} vs bot ${bot.userId.slice(0, 8)}`,
-  );
-  const matchId = await createMatch(player, bot);
-  // Start bot behavior (fake submissions + eventual solve)
+  if (!matchId) return;
+
   const match = await db.query.matches.findFirst({
     where: eq(matches.id, matchId),
     columns: { problemId: true },
@@ -179,6 +212,67 @@ async function matchWithBot(player: QueuedPlayer): Promise<void> {
   if (match?.problemId) {
     botEngine.start(matchId, bot.userId, match.problemId);
   }
+}
+
+// Create a solo match ("Against Time") — bot is a placeholder, never submits or solves.
+async function createSoloMatch(player: QueuedPlayer): Promise<string | null> {
+  const bot = await selectRandomBot(player.rating);
+  if (!bot) return null;
+  logger.info("Matchmaking", `Solo timed match for ${player.userId.slice(0, 8)}`);
+  return createMatch(player, bot, player.duration);
+}
+
+// Try to match with a real opponent from the queue. Returns null if no valid opponent found.
+async function tryMatchWithRealOpponent(
+  player: QueuedPlayer,
+  rating: number,
+): Promise<{ status: "matched"; matchId: string } | { status: "queued" } | null> {
+  const opponent = findMatch(player);
+  if (!opponent) return null;
+
+  if (!socketEmit.isUserConnected(opponent.userId)) {
+    queue.delete(opponent.userId);
+    socketEmit.trackQueueLeave(opponent.userId);
+    logger.warn("Matchmaking", `Skipping disconnected opponent ${opponent.userId.slice(0, 8)}`);
+    queue.set(player.userId, player);
+    socketEmit.trackQueueJoin(player.userId);
+    return { status: "queued" };
+  }
+
+  queue.delete(opponent.userId);
+  cancelBotTimer(opponent.userId);
+  socketEmit.trackQueueLeave(opponent.userId);
+  logger.info(
+    "Matchmaking",
+    `Matched ${player.userId.slice(0, 8)} (${rating}) with ${opponent.userId.slice(0, 8)} (${opponent.rating})`,
+  );
+  const matchId = await createMatch(player, opponent, player.duration);
+  return { status: "matched", matchId };
+}
+
+// Handle solo mode — returns a result if it's a solo match, null otherwise.
+async function handleSoloMode(
+  player: QueuedPlayer,
+): Promise<{ status: "matched"; matchId: string } | null> {
+  if (player.duration !== SOLO_TIMED_DURATION) return null;
+  const matchId = await createSoloMatch(player);
+  if (!matchId) throw new Error("No problems available for this rating bracket");
+  return { status: "matched", matchId };
+}
+
+// Returns true if user is already in queue for the same mode (no action needed).
+// Returns false if user is not in queue or was in a different mode (re-queue needed).
+function handleExistingQueueEntry(userId: string, duration: number): boolean {
+  const existing = queue.get(userId);
+  if (!existing) return false;
+  if (existing.duration === duration) return true;
+  cancelBotTimer(userId);
+  queue.delete(userId);
+  logger.info("Matchmaking", `User ${userId.slice(0, 8)} switched mode`, {
+    from: existing.duration,
+    to: duration,
+  });
+  return false;
 }
 
 function startBotTimer(player: QueuedPlayer): void {
@@ -205,6 +299,7 @@ export const matchmaking = {
    */
   async join(
     userId: string,
+    duration = 900,
   ): Promise<{ status: "queued" | "matched" | "already_in_match"; matchId?: string }> {
     // Get user stats (outside lock - read-only)
     const stats = await db.query.userStats.findFirst({
@@ -227,41 +322,19 @@ export const matchmaking = {
         return { status: "already_in_match", matchId: existingMatchId };
       }
 
-      // Check if already in queue
-      if (queue.has(userId)) {
-        logger.debug("Matchmaking", `User ${userId.slice(0, 8)} already in queue`);
+      // Check if already in queue — if same mode, no-op; if different mode, switch.
+      if (handleExistingQueueEntry(userId, duration)) {
         return { status: "queued" };
       }
 
-      const player: QueuedPlayer = { userId, rating: stats.rating, joinedAt: Date.now() };
-      const opponent = findMatch(player);
+      const player: QueuedPlayer = { userId, rating: stats.rating, joinedAt: Date.now(), duration };
 
-      if (opponent) {
-        // Verify opponent is still connected before matching
-        if (!socketEmit.isUserConnected(opponent.userId)) {
-          // Opponent disconnected, remove from queue and continue searching
-          queue.delete(opponent.userId);
-          socketEmit.trackQueueLeave(opponent.userId);
-          logger.warn(
-            "Matchmaking",
-            `Skipping disconnected opponent ${opponent.userId.slice(0, 8)}, adding ${userId.slice(0, 8)} to queue`,
-          );
-          queue.set(userId, player);
-          socketEmit.trackQueueJoin(userId);
-          return { status: "queued" };
-        }
+      // Solo mode ("Against Time") — instant bot match, no queue, bot never solves
+      const soloResult = await handleSoloMode(player);
+      if (soloResult) return soloResult;
 
-        // Atomic: remove opponent from queue, cancel their bot timer, and create match
-        queue.delete(opponent.userId);
-        cancelBotTimer(opponent.userId);
-        socketEmit.trackQueueLeave(opponent.userId);
-        logger.info(
-          "Matchmaking",
-          `Matched ${userId.slice(0, 8)} (${stats.rating}) with ${opponent.userId.slice(0, 8)} (${opponent.rating})`,
-        );
-        const matchId = await createMatch(player, opponent);
-        return { status: "matched", matchId };
-      }
+      const matchResult = await tryMatchWithRealOpponent(player, stats.rating);
+      if (matchResult) return matchResult;
 
       // No opponent found, add to queue and start bot fallback timer
       queue.set(userId, player);

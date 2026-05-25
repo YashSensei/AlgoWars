@@ -264,10 +264,10 @@ export const matchEngine = {
         .set({ status: "COMPLETED", winnerId: userId, endedAt: new Date() })
         .where(eq(matches.id, matchId));
 
-      // Update ratings using Elo — winner gains, loser loses the same delta
+      // Update ratings — skip entirely for solo TIMED mode
       const winner = match.players.find((p) => p.userId === userId);
       const loser = match.players.find((p) => p.userId !== userId);
-      if (winner && loser) {
+      if (winner && loser && match.mode !== "TIMED") {
         const delta = calculateEloDelta(winner.ratingBefore, loser.ratingBefore);
         await updatePlayerRating(winner.userId, matchId, "WON", delta);
         await updatePlayerRating(loser.userId, matchId, "LOST", -delta);
@@ -334,13 +334,15 @@ export const matchEngine = {
         .set({ status: "COMPLETED", winnerId: opponent.userId, endedAt: new Date() })
         .where(eq(matches.id, matchId));
 
-      // Update ratings using Elo
-      const winnerPlayer = match.players.find((p) => p.userId === opponent.userId);
-      const loserPlayer = match.players.find((p) => p.userId === forfeitingUserId);
-      if (winnerPlayer && loserPlayer) {
-        const delta = calculateEloDelta(winnerPlayer.ratingBefore, loserPlayer.ratingBefore);
-        await updatePlayerRating(winnerPlayer.userId, matchId, "WON", delta);
-        await updatePlayerRating(loserPlayer.userId, matchId, "LOST", -delta);
+      // Update ratings — skip entirely for solo TIMED mode
+      if (match.mode !== "TIMED") {
+        const winnerPlayer = match.players.find((p) => p.userId === opponent.userId);
+        const loserPlayer = match.players.find((p) => p.userId === forfeitingUserId);
+        if (winnerPlayer && loserPlayer) {
+          const delta = calculateEloDelta(winnerPlayer.ratingBefore, loserPlayer.ratingBefore);
+          await updatePlayerRating(winnerPlayer.userId, matchId, "WON", delta);
+          await updatePlayerRating(loserPlayer.userId, matchId, "LOST", -delta);
+        }
       }
       for (const p of match.players) socketEmit.clearUserMatch(p.userId);
 
@@ -386,10 +388,9 @@ export const matchEngine = {
         .set({ status: "ABORTED", endedAt: new Date() })
         .where(eq(matches.id, matchId));
 
-      // Abort/timeout: no rating change — neither player proved anything.
-      // Just record the draw and clean up socket state.
+      // Abort/timeout: record draw for competitive modes, skip entirely for TIMED (solo).
       for (const player of match.players) {
-        if (match.status === "ACTIVE") {
+        if (match.status === "ACTIVE" && match.mode !== "TIMED") {
           await updatePlayerRating(player.userId, matchId, "DRAW", 0);
         }
         socketEmit.clearUserMatch(player.userId);

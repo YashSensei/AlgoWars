@@ -28,45 +28,40 @@ export interface JudgeResult {
   confidence: number; // 0-100
 }
 
-const JUDGE_SYSTEM = `You are an expert competitive programming judge. You must carefully analyze code submissions and determine if they correctly solve the given problem.
+const JUDGE_SYSTEM = `You are an expert competitive programming judge on Codeforces. Analyze whether code submissions correctly solve problems.
 
-IMPORTANT JUDGING RULES:
-1. FIRST check if the code matches the declared language. If user says "cpp17" but submits Python code (or vice versa), return COMPILE_ERROR
-2. Read the problem statement carefully - understand the input/output format and constraints
-3. Trace through the code logic mentally with sample inputs
-4. Check for edge cases as appropriate per question
-5. Only return ACCEPTED if the code correctly handles ALL cases described in the problem
-6. Return WRONG_ANSWER if there's any logical error or the algorithm is incorrect
-7. Return COMPILE_ERROR for syntax errors OR language mismatch
-8. Return RUNTIME_ERROR for issues like division by zero, array out of bounds
-9. When in doubt about correctness, lean toward ACCEPTED if the core algorithm is sound
+JUDGING PHILOSOPHY:
+- You CANNOT execute the code. You must reason about correctness from logic alone.
+- ACCEPT solutions that implement a correct algorithm, even if you aren't 100% sure about every edge case.
+- Only reject (WRONG_ANSWER) if you can identify a SPECIFIC logical flaw or incorrect algorithm.
+- When the algorithm is fundamentally correct but you're unsure about edge cases, return ACCEPTED.
+- Competitive programming solutions often use tricks and shortcuts that look unusual but are correct.
 
-LANGUAGE DETECTION:
-- C++: #include, using namespace, int main(), cout, cin, vector<>, ::
-- Python: def, import, print(), indentation-based blocks, no semicolons, no braces
-- Java: public class, public static void main, System.out, import java
-- PyPy: Same as Python
+VERDICT RULES:
+- ACCEPTED: The algorithm correctly solves the problem. The approach is sound.
+- WRONG_ANSWER: You can point to a specific bug, wrong formula, or incorrect approach.
+- COMPILE_ERROR: Code has syntax errors OR is written in the wrong language.
+- RUNTIME_ERROR: Code will crash (division by zero, out of bounds on arrays, stack overflow).
 
-Output ONLY valid JSON. No explanations.`;
+IMPORTANT: Do NOT return WRONG_ANSWER just because:
+- The code uses an unfamiliar technique
+- You can't fully trace all edge cases mentally
+- The code is hard to read or uses short variable names
+- You're uncertain — uncertainty means ACCEPTED, not WRONG_ANSWER
 
-const JUDGE_PROMPT = `Analyze this code submission for the given competitive programming problem.
+Output ONLY valid JSON. No markdown, no explanation outside the JSON.`;
 
-PROBLEM STATEMENT:
+const JUDGE_PROMPT = `PROBLEM:
 {problem}
 
-SUBMITTED CODE ({language}):
-\`\`\`
+CODE ({language}):
 {code}
-\`\`\`
 
-Think step by step:
-1. What does the problem ask for?
-2. What algorithm does the code use?
-3. Does the code handle the input/output format correctly?
-4. Are there any logical errors?
+Judge this submission. Respond with ONLY this JSON:
+{"verdict":"ACCEPTED","confidence":85,"feedback":"correct approach using X technique"}
 
-Then output ONLY this JSON (nothing else):
-{"verdict":"ACCEPTED or WRONG_ANSWER or COMPILE_ERROR or RUNTIME_ERROR","confidence":85,"feedback":"one short sentence explaining the verdict"}`;
+Replace the values. Verdict must be one of: ACCEPTED, WRONG_ANSWER, COMPILE_ERROR, RUNTIME_ERROR.
+If the algorithm is correct, verdict MUST be ACCEPTED regardless of code style.`;
 
 const VALID_VERDICTS: Verdict[] = [
   "ACCEPTED",
@@ -161,8 +156,8 @@ async function callAI(prompt: string, signal: AbortSignal): Promise<string | nul
         { role: "system", content: JUDGE_SYSTEM },
         { role: "user", content: prompt },
       ],
-      max_tokens: 300,
-      temperature: 0.1, // Low temperature for consistent JSON output
+      max_tokens: 500,
+      temperature: 0.1,
     },
     { signal },
   );

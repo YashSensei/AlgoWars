@@ -286,8 +286,11 @@ export default function ProfilePage() {
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-text-muted truncate">
-                    {match.problem?.title ?? "Unknown Problem"}
+                  <div className="text-xs text-text-muted truncate flex items-center gap-2">
+                    <span>{match.problem?.title ?? "Unknown Problem"}</span>
+                    <span className="px-1.5 py-0.5 text-[9px] uppercase tracking-wider rounded bg-white/5 border border-white/10 text-white/50 shrink-0">
+                      {match.mode === "TIMED" ? "Solo" : match.mode.toLowerCase()}
+                    </span>
                   </div>
                   {match.endReason === "forfeit" && match.forfeiter?.username && (
                     <div className="text-[10px] text-yellow-400/80 mt-1 italic">
