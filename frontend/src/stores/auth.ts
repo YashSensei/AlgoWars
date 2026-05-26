@@ -4,6 +4,29 @@ import { authApi, usersApi, ApiClientError } from "@/lib/api";
 import type { User } from "@/lib/api";
 import type { Provider } from "@supabase/supabase-js";
 
+async function fetchProfileWithRetry(): Promise<User> {
+  try {
+    return await usersApi.getMe();
+  } catch (err) {
+    // On 401, try ensureProfile (first OAuth login where DB row doesn't exist yet)
+    if (err instanceof ApiClientError && err.status === 401) {
+      const { user } = await authApi.ensureProfile();
+      return user;
+    }
+    // On network error or timeout, wait 3s and retry once (Render cold start)
+    await new Promise((r) => setTimeout(r, 3000));
+    try {
+      return await usersApi.getMe();
+    } catch (retryErr) {
+      if (retryErr instanceof ApiClientError && retryErr.status === 401) {
+        const { user } = await authApi.ensureProfile();
+        return user;
+      }
+      throw retryErr;
+    }
+  }
+}
+
 interface AuthState {
   // State
   user: User | null;
@@ -40,19 +63,14 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         return;
       }
 
-      // Fetch our DB profile; auto-create on first OAuth login (profile doesn't exist yet).
-      try {
-        const user = await usersApi.getMe();
-        set({ user, initialized: true });
-      } catch (err) {
-        if (err instanceof ApiClientError && err.status === 401) {
-          const { user } = await authApi.ensureProfile();
-          set({ user, initialized: true });
-          return;
-        }
-        throw err;
-      }
+      // Fetch our DB profile; auto-create on first OAuth login.
+      // Retry once after 2s if the backend is unreachable (cold start on Render).
+      const user = await fetchProfileWithRetry();
+      set({ user, initialized: true });
     } catch {
+      // Only if session exists but profile fetch truly fails after retries —
+      // sign out to prevent infinite redirect loops.
+      await supabase.auth.signOut();
       set({ initialized: true });
     }
   },

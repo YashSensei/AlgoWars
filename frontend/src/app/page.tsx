@@ -105,7 +105,7 @@ export default function LandingPage() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 mb-16">
-            <Link href="/queue">
+            <Link href="/signup">
               <Button
                 variant="primary"
                 size="lg"

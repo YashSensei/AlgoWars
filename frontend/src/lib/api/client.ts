@@ -68,7 +68,14 @@ async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise
     // After retry still 401 → real session death → logout (skip protected pages)
     if (response.status === 401 && typeof window !== "undefined" && !endpoint.startsWith("/auth/")) {
       const path = window.location.pathname;
-      const isProtectedFlow = path.startsWith("/auth/callback") || path.startsWith("/match/");
+      // Don't auto-logout during: OAuth callback, active match, or initial page loads
+      // (arena/queue/profile) where initialization might still be in progress.
+      // Only logout on explicit user actions that 401 after retry.
+      const isProtectedFlow =
+        path.startsWith("/auth/callback") ||
+        path.startsWith("/match/") ||
+        path === "/arena" ||
+        path === "/";
       if (!isProtectedFlow) {
         await supabase.auth.signOut();
         window.location.href = "/login";
