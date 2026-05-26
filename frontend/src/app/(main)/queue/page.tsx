@@ -69,8 +69,13 @@ export default function QueuePage() {
 
         if (!mounted) return;
 
-        // Now join queue via REST API
-        const response = await matchesApi.joinQueue(mode);
+        // Join queue via REST API (with 20s timeout for backend cold start)
+        const response = await Promise.race([
+          matchesApi.joinQueue(mode),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Server is starting up. Please retry.")), 20000),
+          ),
+        ]);
 
         if (!mounted) return;
 

@@ -73,9 +73,7 @@ async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise
       // Only logout on explicit user actions that 401 after retry.
       const isProtectedFlow =
         path.startsWith("/auth/callback") ||
-        path.startsWith("/match/") ||
-        path === "/arena" ||
-        path === "/";
+        path.startsWith("/match/");
       if (!isProtectedFlow) {
         await supabase.auth.signOut();
         window.location.href = "/login";

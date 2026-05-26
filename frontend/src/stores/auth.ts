@@ -52,7 +52,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   error: null,
   initialized: false,
 
-  // Initialize from Supabase session (called once on app load)
+  // Initialize from Supabase session (called once on app load).
+  // Has a hard 15s timeout — if the backend is truly unreachable, we give up
+  // and sign out rather than showing a spinner forever.
   initialize: async () => {
     if (get().initialized) return;
 
@@ -63,33 +65,40 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         return;
       }
 
-      // Fetch our DB profile; auto-create on first OAuth login.
-      // Retry once after 2s if the backend is unreachable (cold start on Render).
-      const user = await fetchProfileWithRetry();
+      const user = await Promise.race([
+        fetchProfileWithRetry(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Init timeout")), 15000),
+        ),
+      ]);
       set({ user, initialized: true });
     } catch {
-      // Only if session exists but profile fetch truly fails after retries —
-      // sign out to prevent infinite redirect loops.
       await supabase.auth.signOut();
       set({ initialized: true });
     }
   },
 
-  // Login with email/password via our backend (which calls Supabase)
+  // Login with email/password via Supabase client directly.
+  // If Supabase auth succeeds, we're logged in regardless of whether the backend
+  // profile fetch works — initialize() on the next page load handles that.
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null });
 
     try {
-      // Sign in directly with Supabase client (handles session persistence)
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
         set({ error: error.message, isLoading: false });
         return false;
       }
 
-      // Fetch our DB profile with stats
-      const user = await usersApi.getMe();
-      set({ user, isLoading: false });
+      // Try to load the profile, but don't block login on it.
+      // If backend is sleeping, let initialize() handle it after redirect.
+      try {
+        const user = await usersApi.getMe();
+        set({ user, isLoading: false });
+      } catch {
+        set({ isLoading: false });
+      }
       return true;
     } catch (err) {
       const message =

@@ -14,7 +14,13 @@ export default function SoloPage() {
 
     async function startSolo() {
       try {
-        const result = await matchesApi.joinQueue("timed");
+        // Race against a 20s timeout — covers Render cold start
+        const result = await Promise.race([
+          matchesApi.joinQueue("timed"),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Server is starting up. Please try again.")), 20000),
+          ),
+        ]);
         if (!mounted) return;
 
         if (result.status === "matched" && result.matchId) {
@@ -26,7 +32,7 @@ export default function SoloPage() {
         }
       } catch (err) {
         if (!mounted) return;
-        setError(err instanceof ApiClientError ? err.message : "Something went wrong");
+        setError(err instanceof Error ? err.message : "Something went wrong");
       }
     }
 

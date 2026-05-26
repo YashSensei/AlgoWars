@@ -27,24 +27,31 @@ export default function AuthCallbackPage() {
       }
 
       try {
-        // Ensure DB profile exists for this OAuth user
-        const { user } = await authApi.ensureProfile();
+        // Ensure DB profile exists — retry once if backend is waking from sleep
+        let user;
+        try {
+          const res = await authApi.ensureProfile();
+          user = res.user;
+        } catch {
+          // Backend might be cold-starting — wait 3s and retry
+          await new Promise((r) => setTimeout(r, 3000));
+          const res = await authApi.ensureProfile();
+          user = res.user;
+        }
 
-        // Update auth store
         if (user) {
           useAuthStore.getState().setUser(user);
           useAuthStore.setState({ initialized: true });
         }
 
-        // Route based on whether user has a username
         if (user?.username) {
           router.push("/arena");
         } else {
           router.push("/choose-username");
         }
       } catch {
-        setError("Failed to set up your account. Please try again.");
-        setTimeout(() => router.push("/login"), 2000);
+        // If both attempts fail, redirect to arena anyway — initialize() will handle it
+        router.push("/arena");
       }
     }
 
