@@ -51,21 +51,35 @@ function fetchUserProfile(userId: string) {
 
 export const authService = {
   /**
-   * Register a new user via Supabase Auth + create DB profile.
-   * User must verify email before they can log in.
+   * Check if username and email are available. Throws if taken.
+   * Called before OTP generation to fail fast.
    */
-  async register(username: string, email: string, password: string) {
-    // Check username availability first (fast DB check)
+  async checkAvailability(username: string, email: string) {
     const existingUsername = await db.query.users.findFirst({
       where: eq(users.username, username),
     });
     if (existingUsername) throw Errors.Conflict("Username already taken");
 
-    // Create Supabase auth user (email_confirm: false = must verify)
+    const existingEmail = await db.query.users.findFirst({
+      where: eq(users.email, email),
+    });
+    if (existingEmail) throw Errors.Conflict("Email already registered");
+  },
+
+  /**
+   * Register a new user via Supabase Auth + create DB profile.
+   */
+  async register(username: string, email: string, password: string) {
+    const existingUsername = await db.query.users.findFirst({
+      where: eq(users.username, username),
+    });
+    if (existingUsername) throw Errors.Conflict("Username already taken");
+
+    // Create Supabase auth user (auto-confirmed — verification handled via EmailJS OTP)
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      email_confirm: false,
+      email_confirm: true,
       user_metadata: { username },
     });
 

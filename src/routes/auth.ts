@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import { Errors } from "../lib/errors";
 import { supabaseAuthMiddleware } from "../middleware/auth";
 import { authService } from "../services/auth";
+import { otpService } from "../services/otp";
 
 export const authRoutes = new Hono();
 
@@ -33,7 +34,9 @@ const refreshSchema = z.object({
 
 /**
  * POST /auth/register
- * Creates Supabase user + DB profile. Returns message to verify email.
+ * Step 1: Validates input (checks username/email availability), generates OTP.
+ * Returns the code to the frontend which sends the verification email via EmailJS.
+ * NO user/DB writes happen here — only stored in-memory pending verification.
  */
 authRoutes.post("/register", async (c) => {
   let body: unknown;
@@ -49,9 +52,45 @@ authRoutes.post("/register", async (c) => {
   }
 
   const { username, email, password } = parsed.data;
-  const result = await authService.register(username, email, password);
 
-  return c.json(result, 201);
+  // Early availability checks — fail fast before generating OTP
+  await authService.checkAvailability(username, email);
+
+  const code = otpService.create(username, email, password);
+  return c.json({ code, message: "Verification code generated" }, 200);
+});
+
+const verifyOtpSchema = z.object({
+  email: z.email(),
+  code: z.string().length(6),
+});
+
+/**
+ * POST /auth/verify-otp
+ * Step 2: Verifies OTP code, creates Supabase user + DB profile, then auto-signs in.
+ * Returns user + session so the frontend can proceed directly without a separate login.
+ */
+authRoutes.post("/verify-otp", async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    throw Errors.BadRequest("Invalid JSON body");
+  }
+
+  const parsed = verifyOtpSchema.safeParse(body);
+  if (!parsed.success) {
+    throw Errors.BadRequest(parsed.error.issues[0]?.message ?? "Invalid input");
+  }
+
+  const pending = otpService.verify(parsed.data.email, parsed.data.code);
+  if (!pending) {
+    throw Errors.BadRequest("Invalid or expired verification code");
+  }
+
+  await authService.register(pending.username, pending.email, pending.password);
+  const loginResult = await authService.login(pending.email, pending.password);
+  return c.json(loginResult, 201);
 });
 
 /**

@@ -51,18 +51,19 @@ export default function QueuePage() {
         // Connect socket BEFORE joining queue so we don't miss the match event
         const socket = getSocket();
 
-        // Wait for socket to connect before joining queue
+        // Wait for socket to connect — give it up to 10s with retries.
+        // Don't reject on first connect_error (Socket.IO retries automatically).
         if (!socket.connected) {
           await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error("Socket connection timeout")), 5000);
-            socket.once("connect", () => {
+            const timeout = setTimeout(() => {
+              socket.off("connect", onConnect);
+              reject(new Error("Socket connection timeout"));
+            }, 10000);
+            const onConnect = () => {
               clearTimeout(timeout);
               resolve();
-            });
-            socket.once("connect_error", (err) => {
-              clearTimeout(timeout);
-              reject(err);
-            });
+            };
+            socket.once("connect", onConnect);
           });
         }
 
