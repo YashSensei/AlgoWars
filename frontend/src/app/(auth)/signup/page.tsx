@@ -9,7 +9,7 @@ import { z } from "zod";
 import emailjs from "@emailjs/browser";
 
 import { Button, GlassPanel, Input } from "@/components/ui";
-import { useAuthStore, useIsAuthenticated } from "@/stores";
+import { useAuthStore, useIsAuthenticated, authFlags } from "@/stores";
 import { supabase } from "@/lib/supabase/client";
 import { api, ApiClientError } from "@/lib/api";
 
@@ -95,14 +95,14 @@ export default function SignupPage() {
       // Verify OTP + create account on backend
       await api.post("/auth/verify-otp", { email, code: otpInput });
 
-      // Sign in directly with the Supabase client using the password we collected.
-      // This is the most reliable way to establish a session — goes through Supabase's
-      // full auth flow and writes tokens to localStorage correctly.
+      // Block the onAuthStateChange handler BEFORE signing in —
+      // signInWithPassword triggers the event synchronously during the await.
+      authFlags.isNavigating = true;
       await supabase.auth.signInWithPassword({ email, password });
-
-      // Hard navigate — fresh React tree reads the authenticated session.
+      await new Promise((r) => setTimeout(r, 300));
       window.location.href = "/arena";
     } catch (err) {
+      authFlags.isNavigating = false;
       setError(err instanceof ApiClientError ? err.message : "Verification failed");
       setLoading(false);
     }

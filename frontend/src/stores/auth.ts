@@ -45,6 +45,11 @@ interface AuthState {
   refreshUser: () => Promise<void>;
 }
 
+// Flags to prevent auth races.
+// isNavigating: blocks onAuthStateChange during hard navigates (login/signup)
+// isInitializing: prevents concurrent initialize() calls
+export const authFlags = { isNavigating: false, isInitializing: false };
+
 export const useAuthStore = create<AuthState>()((set, get) => ({
   // Initial state
   user: null,
@@ -56,7 +61,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   // Has a hard 15s timeout — if the backend is truly unreachable, we give up
   // and sign out rather than showing a spinner forever.
   initialize: async () => {
-    if (get().initialized) return;
+    if (get().initialized || authFlags.isInitializing) return;
+    authFlags.isInitializing = true;
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -75,6 +81,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     } catch {
       await supabase.auth.signOut();
       set({ initialized: true });
+    } finally {
+      authFlags.isInitializing = false;
     }
   },
 
@@ -85,17 +93,21 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
+      // Set flag BEFORE signIn — the event fires synchronously during the await
+      authFlags.isNavigating = true;
+
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
+        authFlags.isNavigating = false;
         set({ error: error.message, isLoading: false });
         return false;
       }
 
-      // Hard navigate — guarantees clean auth state on the next page.
-      // Avoids the race between onAuthStateChange, initialize(), and router.push.
+      await new Promise((r) => setTimeout(r, 300));
       window.location.href = "/arena";
       return true;
     } catch (err) {
+      authFlags.isNavigating = false;
       const message =
         err instanceof ApiClientError
           ? err.message

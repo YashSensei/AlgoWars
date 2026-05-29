@@ -5,4 +5,5 @@ export {
   useAuthLoading,
   useAuthError,
   useNeedsUsername,
+  authFlags,
 } from "./auth";

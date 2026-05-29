@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { useAuthStore } from "@/stores/auth";
+import { useAuthStore, authFlags } from "@/stores/auth";
 
 /**
  * Initializes auth state from Supabase session and listens for changes.
@@ -23,6 +23,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event) => {
       if (event === "SIGNED_IN") {
+        // Skip if a hard navigate is imminent (login/signup just called signInWithPassword
+        // and is about to do window.location.href). Running initialize() now would race
+        // with the navigate and crash with SyntaxError when the response arrives to a dead page.
+        if (authFlags.isNavigating) return;
+
         const alreadyAuthed = !!useAuthStore.getState().user;
         if (!alreadyAuthed) {
           useAuthStore.setState({ initialized: false });
