@@ -61,11 +61,16 @@ export default function SignupPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.post<{ code: string }>("/auth/register", {
-        username: data.username,
-        email: data.email,
-        password: data.password,
-      });
+      const res = await Promise.race([
+        api.post<{ code: string }>("/auth/register", {
+          username: data.username,
+          email: data.email,
+          password: data.password,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Server is starting up. Please try again.")), 20000),
+        ),
+      ]);
 
       // Send verification email via EmailJS
       await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
