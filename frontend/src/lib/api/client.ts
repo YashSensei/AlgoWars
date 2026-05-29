@@ -43,7 +43,9 @@ async function doFetch(url: string, options: RequestInit, token: string | null):
  */
 async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  let token = await getToken();
+  // Skip token for public auth endpoints — prevents broken localStorage from blocking signup/login
+  const isPublicAuth = endpoint.startsWith("/auth/register") || endpoint.startsWith("/auth/verify-otp");
+  let token = isPublicAuth ? null : await getToken();
   let response = await doFetch(url, options, token);
 
   // On 401, try refreshing the session once before giving up
