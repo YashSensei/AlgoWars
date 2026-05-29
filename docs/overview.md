@@ -296,23 +296,35 @@ XP is a **progression metric separate from Elo**. Elo measures skill (goes up an
 
 ### Three Auth Paths
 
-**Path 1 — Google OAuth (primary):**
+**Path 1 — Google OAuth (primary, recommended):**
 ```
-Login page → supabase.auth.signInWithOAuth({provider: "google"})
-  → Redirect to Google → consent → redirect to Supabase callback
+Login/Signup page → "Continue with Google"
+  → supabase.auth.signInWithOAuth({provider: "google"})
+  → Redirect to Google → consent → Supabase callback
   → Supabase mints JWT → redirect to /auth/callback
-  → Frontend reads session → POST /auth/ensure-profile (supabaseAuthMiddleware)
-  → Backend: ensureProfile() creates users + user_stats rows if first login
-  → If username null → /choose-username → PATCH /users/me/username
-  → Redirect to /arena
+  → Frontend: POST /auth/ensure-profile (creates DB rows if first login)
+  → If username null → /choose-username
+  → router.push("/arena")
 ```
 
-**Path 2 — Email/Password:**
+**Path 2 — Email/Password (OTP verification via EmailJS):**
 ```
-Signup → POST /auth/register → Supabase creates user + sends verification email
-  → User clicks email link → session established
-  → Login → supabase.auth.signInWithPassword() → session in localStorage
-  → GET /users/me → loads profile
+Signup:
+  1. User fills form → POST /auth/register {username, email, password}
+     → Backend validates, checks availability, generates 6-digit OTP
+     → Returns {code} to frontend (NO user created yet)
+  2. Frontend sends code via EmailJS to user's email
+  3. User enters code → POST /auth/verify-otp {email, code}
+     → Backend verifies OTP → creates Supabase user + public.users + user_stats
+     → Backend auto-signs in → returns session tokens
+  4. Frontend: authFlags.isNavigating = true → signInWithPassword → 300ms delay
+     → window.location.href = "/arena" (hard navigate, avoids auth state race)
+
+Login:
+  1. authFlags.isNavigating = true
+  2. supabase.auth.signInWithPassword → session stored in localStorage
+  3. 300ms delay → window.location.href = "/arena" (hard navigate)
+  4. Fresh page: AuthProvider.initialize() → getMe() → arena renders
 ```
 
 **Path 3 — Token Refresh (automatic):**
@@ -321,7 +333,15 @@ API client sends request → 401 response
   → supabase.auth.refreshSession() → new access token
   → Retry the same request with fresh token
   → If retry also 401s → sign out, redirect to /login
+  (Suppressed on /login, /signup, /auth/callback, /match/* pages)
 ```
+
+### Race Condition Prevention
+
+- `authFlags.isNavigating` — set BEFORE `signInWithPassword`, blocks `onAuthStateChange` handler from firing `initialize()` during the hard navigate. Prevents SyntaxError from in-flight fetches on a dying page.
+- `authFlags.isInitializing` — prevents concurrent `initialize()` calls (from useEffect + onAuthStateChange racing).
+- Both flags reset on error paths so they don't permanently block.
+- Public auth endpoints (`/auth/register`, `/auth/verify-otp`) skip token retrieval to avoid broken localStorage blocking signup.
 
 ### Token Architecture
 
@@ -332,6 +352,7 @@ API client sends request → 401 response
 - Two middleware levels:
   - `authMiddleware` — verifies token AND loads user from DB (most endpoints)
   - `supabaseAuthMiddleware` — verifies token only, no DB lookup (for `/auth/ensure-profile` where the DB row may not exist yet)
+- `ensureProfile` auto-heals missing `user_stats` rows (handles partial signup failures gracefully)
 
 ---
 
