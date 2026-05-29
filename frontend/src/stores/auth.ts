@@ -78,9 +78,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     }
   },
 
-  // Login with email/password via Supabase client directly.
-  // If Supabase auth succeeds, we're logged in regardless of whether the backend
-  // profile fetch works — initialize() on the next page load handles that.
+  // Login with email/password via Supabase client.
+  // On success, does a hard navigate to /arena so the fresh page load
+  // triggers initialize() cleanly (avoids auth state race conditions).
   login: async (email: string, password: string) => {
     set({ isLoading: true, error: null });
 
@@ -91,14 +91,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         return false;
       }
 
-      // Try to load the profile, but don't block login on it.
-      // If backend is sleeping, let initialize() handle it after redirect.
-      try {
-        const user = await usersApi.getMe();
-        set({ user, isLoading: false });
-      } catch {
-        set({ isLoading: false });
-      }
+      // Hard navigate — guarantees clean auth state on the next page.
+      // Avoids the race between onAuthStateChange, initialize(), and router.push.
+      window.location.href = "/arena";
       return true;
     } catch (err) {
       const message =

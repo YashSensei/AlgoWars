@@ -131,9 +131,18 @@ export const authService = {
    */
   async ensureProfile(supabaseUserId: string, email: string) {
     const existing = await fetchUserProfile(supabaseUserId);
-    if (existing) return existing;
+    if (existing) {
+      // Ensure user_stats row exists (can be missing if a prior signup partially failed)
+      const stats = await db.query.userStats.findFirst({
+        where: eq(userStats.userId, supabaseUserId),
+      });
+      if (!stats) {
+        await db.insert(userStats).values({ userId: supabaseUserId });
+      }
+      return existing;
+    }
 
-    // First-time OAuth user — create profile without username
+    // First-time user — create profile without username
     await db.transaction(async (tx) => {
       await tx.insert(users).values({ id: supabaseUserId, email });
       await tx.insert(userStats).values({ userId: supabaseUserId });
