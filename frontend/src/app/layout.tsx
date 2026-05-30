@@ -28,8 +28,30 @@ export const metadata: Metadata = {
   description:
     "Real-time 1v1 competitive programming battles. Challenge opponents, solve algorithmic problems, climb the ranks.",
   icons: {
-    icon: "/favicon.ico",
+    icon: "/favicon.png",
   },
+  openGraph: {
+    title: "AlgoWars - Code. Battle. Conquer.",
+    description: "Real-time 1v1 competitive programming battles. Prove your algorithmic skill.",
+    url: "https://www.algowars.online",
+    siteName: "AlgoWars",
+    images: [
+      {
+        url: "/algowar-banner.png",
+        width: 1200,
+        height: 630,
+        alt: "AlgoWars - Competitive Programming Arena",
+      },
+    ],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AlgoWars - Code. Battle. Conquer.",
+    description: "Real-time 1v1 competitive programming battles. Prove your algorithmic skill.",
+    images: ["/algowar-banner.png"],
+  },
+  metadataBase: new URL("https://www.algowars.online"),
 };
 
 export default function RootLayout({
