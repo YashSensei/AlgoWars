@@ -23,12 +23,16 @@ import { Errors } from "../lib/errors";
 import { logger } from "../lib/logger";
 import { adminMiddleware, authMiddleware } from "../middleware/auth";
 import { matchEngine } from "../services/match-engine";
+import { adminWaitlistRoutes } from "./admin-waitlist";
 
 export const adminRoutes = new Hono();
 
 // All admin routes require auth + admin role
 adminRoutes.use("*", authMiddleware);
 adminRoutes.use("*", adminMiddleware);
+
+// Mount waitlist + invite code sub-routes (all under /admin/waitlist/*)
+adminRoutes.route("/waitlist", adminWaitlistRoutes);
 
 // UUID validation
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

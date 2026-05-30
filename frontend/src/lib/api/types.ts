@@ -19,8 +19,10 @@ export interface UserStats {
 // User from users table
 export interface User {
   id: string;
-  username: string | null; // null for OAuth users who haven't chosen one yet
+  username: string | null;
   email: string;
+  status: "WAITLISTED" | "APPROVED" | "REJECTED" | "BANNED";
+  waitlistNumber: number | null;
   createdAt: string;
   stats: UserStats | null;
 }

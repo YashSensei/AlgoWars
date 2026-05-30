@@ -4,7 +4,7 @@
  * Verifies Supabase JWTs via JWKS (public key discovery)
  */
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { userStats, users } from "../db/schema";
 import { db } from "../lib/db";
@@ -25,11 +25,20 @@ function handleDuplicateError(err: unknown): never {
   throw Errors.Conflict("Email or username already taken");
 }
 
+// Helper: Get the next waitlist number (sequential, never reused)
+async function getNextWaitlistNumber(): Promise<number> {
+  const result = await db
+    .select({ max: sql`coalesce(max(${users.waitlistNumber}), 0)` })
+    .from(users);
+  return (Number(result[0]?.max) || 0) + 1;
+}
+
 // Helper: Create DB profile + stats, rollback Supabase user on failure
 async function createDbProfile(userId: string, email: string, username?: string) {
   try {
+    const waitlistNumber = await getNextWaitlistNumber();
     await db.transaction(async (tx) => {
-      await tx.insert(users).values({ id: userId, username, email });
+      await tx.insert(users).values({ id: userId, username, email, waitlistNumber });
       await tx.insert(userStats).values({ userId });
     });
   } catch (err) {
@@ -143,8 +152,9 @@ export const authService = {
     }
 
     // First-time user — create profile without username
+    const waitlistNumber = await getNextWaitlistNumber();
     await db.transaction(async (tx) => {
-      await tx.insert(users).values({ id: supabaseUserId, email });
+      await tx.insert(users).values({ id: supabaseUserId, email, waitlistNumber });
       await tx.insert(userStats).values({ userId: supabaseUserId });
     });
 

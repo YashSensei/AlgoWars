@@ -6,13 +6,20 @@ import { Errors } from "../lib/errors";
 import type { AuthPayload } from "../services/auth";
 import { authService } from "../services/auth";
 
-// User role type
+// User types for context
 type UserRole = "USER" | "ADMIN";
+type UserStatus = "WAITLISTED" | "APPROVED" | "REJECTED" | "BANNED";
 
 // Extend Hono's context to include user
 declare module "hono" {
   interface ContextVariableMap {
-    user: { id: string; username: string | null; email: string; role: UserRole };
+    user: {
+      id: string;
+      username: string | null;
+      email: string;
+      role: UserRole;
+      status: UserStatus;
+    };
     supabaseUser: { id: string; email: string };
   }
 }
@@ -31,12 +38,25 @@ export async function authMiddleware(c: Context, next: Next) {
 
   const user = await db.query.users.findFirst({
     where: eq(users.id, userId),
-    columns: { id: true, username: true, email: true, role: true },
+    columns: { id: true, username: true, email: true, role: true, status: true },
   });
 
   if (!user) throw Errors.Unauthorized("User not found");
+  if (user.status === "BANNED") throw Errors.Forbidden("Account banned");
 
   c.set("user", user);
+  await next();
+}
+
+/**
+ * Requires user status to be APPROVED. Must be used AFTER authMiddleware.
+ * Blocks WAITLISTED and REJECTED users from game features.
+ */
+export async function requireApproved(c: Context, next: Next) {
+  const user = c.get("user");
+  if (user.status !== "APPROVED") {
+    throw Errors.Forbidden("Account not yet approved");
+  }
   await next();
 }
 

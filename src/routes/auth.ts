@@ -1,9 +1,48 @@
+import { and, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod/v4";
+import { inviteCodes, users } from "../db/schema";
+import { db } from "../lib/db";
 import { Errors } from "../lib/errors";
-import { supabaseAuthMiddleware } from "../middleware/auth";
+import { authMiddleware, supabaseAuthMiddleware } from "../middleware/auth";
 import { authService } from "../services/auth";
 import { otpService } from "../services/otp";
+
+function validateInviteCode(invite: {
+  expiresAt: Date | null;
+  maxUses: number;
+  usedCount: number;
+}): void {
+  if (invite.expiresAt && invite.expiresAt < new Date()) throw Errors.BadRequest("Code expired");
+  if (invite.maxUses > 0 && invite.usedCount >= invite.maxUses)
+    throw Errors.BadRequest("Code no longer valid");
+}
+
+async function redeemInviteCode(code: string, userId: string): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const invite = await tx.query.inviteCodes.findFirst({ where: eq(inviteCodes.code, code) });
+    if (!invite) throw Errors.BadRequest("Invalid invite code");
+    validateInviteCode(invite);
+
+    const condition =
+      invite.maxUses > 0
+        ? and(eq(inviteCodes.id, invite.id), sql`${inviteCodes.usedCount} < ${invite.maxUses}`)
+        : eq(inviteCodes.id, invite.id);
+
+    const [updated] = await tx
+      .update(inviteCodes)
+      .set({ usedCount: sql`${inviteCodes.usedCount} + 1` })
+      .where(condition)
+      .returning({ id: inviteCodes.id });
+    if (!updated) return false;
+
+    await tx
+      .update(users)
+      .set({ status: "APPROVED", approvedAt: new Date(), accessSource: "invite_code" })
+      .where(eq(users.id, userId));
+    return true;
+  });
+}
 
 export const authRoutes = new Hono();
 
@@ -147,4 +186,33 @@ authRoutes.post("/ensure-profile", supabaseAuthMiddleware, async (c) => {
   const { id, email } = c.get("supabaseUser");
   const user = await authService.ensureProfile(id, email);
   return c.json({ user });
+});
+
+const redeemSchema = z.object({ code: z.string().min(1).max(32) });
+
+/**
+ * POST /auth/redeem-invite
+ * Redeems an invite code → sets user status to APPROVED.
+ * Wrapped in a transaction to prevent race conditions on the last slot.
+ */
+authRoutes.post("/redeem-invite", authMiddleware, async (c) => {
+  const user = c.get("user");
+  if (user.status === "APPROVED") return c.json({ success: true, message: "Already approved" });
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    throw Errors.BadRequest("Invalid JSON body");
+  }
+
+  const parsed = redeemSchema.safeParse(body);
+  if (!parsed.success) throw Errors.BadRequest("Invalid code");
+
+  const code = parsed.data.code.toUpperCase();
+
+  const redeemed = await redeemInviteCode(code, user.id);
+  if (!redeemed) throw Errors.BadRequest("Code no longer valid");
+
+  return c.json({ success: true, message: "Access granted" });
 });

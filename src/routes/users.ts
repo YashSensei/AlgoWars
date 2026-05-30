@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod/v4";
 import { matchPlayers, submissions, userStats, users } from "../db/schema";
@@ -25,7 +25,14 @@ userRoutes.get("/me", authMiddleware, async (c) => {
 
   const user = await db.query.users.findFirst({
     where: eq(users.id, id),
-    columns: { id: true, username: true, email: true, createdAt: true },
+    columns: {
+      id: true,
+      username: true,
+      email: true,
+      status: true,
+      waitlistNumber: true,
+      createdAt: true,
+    },
     with: { stats: true },
   });
 
@@ -63,7 +70,14 @@ userRoutes.patch("/me/username", authMiddleware, async (c) => {
 
   const updated = await db.query.users.findFirst({
     where: eq(users.id, id),
-    columns: { id: true, username: true, email: true, createdAt: true },
+    columns: {
+      id: true,
+      username: true,
+      email: true,
+      status: true,
+      waitlistNumber: true,
+      createdAt: true,
+    },
     with: { stats: true },
   });
 
@@ -195,6 +209,39 @@ type MatchPlayerWithMatch = {
     }>;
   };
 };
+
+/**
+ * GET /users/me/waitlist-status
+ * Returns the user's waitlist position and total count. Auth required, no approval needed.
+ */
+userRoutes.get("/me/waitlist-status", authMiddleware, async (c) => {
+  const { id } = c.get("user");
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, id),
+    columns: { status: true, waitlistNumber: true, createdAt: true },
+  });
+  if (!user) throw Errors.NotFound("User");
+
+  const totalResult = await db
+    .select({ total: sql<number>`count(*)` })
+    .from(users)
+    .where(eq(users.status, "WAITLISTED"));
+  const total = totalResult[0]?.total ?? 0;
+
+  const waveResult = await db
+    .select({ currentWave: sql<number>`coalesce(max(${users.waitlistNumber}), 0)` })
+    .from(users)
+    .where(eq(users.status, "APPROVED"));
+  const currentWave = waveResult[0]?.currentWave ?? 0;
+
+  return c.json({
+    status: user.status,
+    waitlistNumber: user.waitlistNumber,
+    totalWaitlisted: total,
+    currentWave,
+    joinedAt: user.createdAt,
+  });
+});
 
 // Get user by username (public profile)
 // NOTE: This must be LAST because /:username is a catch-all pattern

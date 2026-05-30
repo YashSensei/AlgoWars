@@ -301,4 +301,9 @@ export const socketEmit = {
   isUserConnected(userId: string): boolean {
     return (userSocketCount.get(userId) ?? 0) > 0;
   },
+
+  // Notify user their account has been approved (waitlist → approved)
+  userApproved(userId: string) {
+    safeEmit(`user:${userId}`, "user:approved", { status: "APPROVED" });
+  },
 };

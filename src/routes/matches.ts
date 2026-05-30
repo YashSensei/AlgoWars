@@ -12,7 +12,7 @@ import { Hono } from "hono";
 import { matches, matchPlayers, submissions } from "../db/schema";
 import { db } from "../lib/db";
 import { Errors } from "../lib/errors";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireApproved } from "../middleware/auth";
 import { matchEngine } from "../services/match-engine";
 import { matchmaking } from "../services/matchmaking";
 
@@ -22,8 +22,9 @@ const isValidUUID = (id: string) => UUID_REGEX.test(id);
 
 export const matchRoutes = new Hono();
 
-// All routes require auth
+// All routes require auth + approved status (waitlisted users cannot play)
 matchRoutes.use("*", authMiddleware);
+matchRoutes.use("*", requireApproved);
 
 // Map matchmaking errors to user-friendly messages
 function handleMatchmakingError(err: unknown): never {

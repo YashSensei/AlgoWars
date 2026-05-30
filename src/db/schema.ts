@@ -16,6 +16,12 @@ import {
 // ============================================
 
 export const userRoleEnum = pgEnum("user_role", ["USER", "ADMIN"]);
+export const userStatusEnum = pgEnum("user_status", [
+  "WAITLISTED",
+  "APPROVED",
+  "REJECTED",
+  "BANNED",
+]);
 export const gameModeEnum = pgEnum("game_mode", ["BLITZ", "CLASSICAL", "TIMED"]);
 export const matchStatusEnum = pgEnum("match_status", [
   "WAITING",
@@ -48,7 +54,14 @@ export const users = pgTable("users", {
   username: varchar("username", { length: 32 }).unique(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   role: userRoleEnum("role").default("USER").notNull(),
+  status: userStatusEnum("status").default("WAITLISTED").notNull(),
   isBot: boolean("is_bot").default(false).notNull(),
+  waitlistNumber: integer("waitlist_number"),
+  approvedAt: timestamp("approved_at"),
+  approvedBy: text("approved_by"),
+  approvedWave: integer("approved_wave"),
+  accessSource: varchar("access_source", { length: 32 }).default("waitlist").notNull(),
+  adminNotes: text("admin_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }).enableRLS();
@@ -68,6 +81,22 @@ export const userStats = pgTable("user_stats", {
   draws: integer("draws").default(0).notNull(),
   winStreak: integer("win_streak").default(0).notNull(),
   maxStreak: integer("max_streak").default(0).notNull(),
+}).enableRLS();
+
+// ============================================
+// INVITE CODES
+// ============================================
+
+export const inviteCodes = pgTable("invite_codes", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  code: varchar("code", { length: 32 }).notNull().unique(),
+  maxUses: integer("max_uses").default(0).notNull(),
+  usedCount: integer("used_count").default(0).notNull(),
+  createdBy: text("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"),
 }).enableRLS();
 
 // ============================================
@@ -221,6 +250,7 @@ export const submissionsRelations = relations(submissions, ({ one }) => ({
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type UserStats = typeof userStats.$inferSelect;
+export type InviteCode = typeof inviteCodes.$inferSelect;
 export type Problem = typeof problems.$inferSelect;
 export type Match = typeof matches.$inferSelect;
 export type MatchPlayer = typeof matchPlayers.$inferSelect;

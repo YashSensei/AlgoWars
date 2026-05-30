@@ -37,7 +37,7 @@ async function seedBots() {
 
     const [user] = await db
       .insert(users)
-      .values({ username: bot.username, email, isBot: true })
+      .values({ username: bot.username, email, isBot: true, status: "APPROVED", accessSource: "founder" })
       .returning({ id: users.id });
 
     if (user) {

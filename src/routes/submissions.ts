@@ -10,7 +10,7 @@ import { z } from "zod/v4";
 import { matches, matchPlayers, submissions } from "../db/schema";
 import { db } from "../lib/db";
 import { Errors } from "../lib/errors";
-import { authMiddleware } from "../middleware/auth";
+import { authMiddleware, requireApproved } from "../middleware/auth";
 import { matchEngine } from "../services/match-engine";
 import { type Language, submissionQueue } from "../services/submission-queue";
 
@@ -20,8 +20,9 @@ export const submissionRoutes = new Hono();
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isValidUUID = (id: string) => UUID_REGEX.test(id);
 
-// All routes require auth
+// All routes require auth + approved status
 submissionRoutes.use("*", authMiddleware);
+submissionRoutes.use("*", requireApproved);
 
 const submitSchema = z.object({
   matchId: z.string().uuid(),

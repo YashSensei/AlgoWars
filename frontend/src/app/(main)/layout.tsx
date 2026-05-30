@@ -26,11 +26,13 @@ export default function MainLayout({
       router.push("/login");
     } else if (!user.username) {
       router.push("/choose-username");
+    } else if (user.status !== "APPROVED") {
+      router.push("/waitlist");
     }
   }, [user, initialized, router]);
 
-  // Show spinner while initializing or if not authenticated
-  if (!initialized || !user || !user.username) {
+  // Show spinner while initializing or not fully approved
+  if (!initialized || !user || !user.username || user.status !== "APPROVED") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg-dark">
         <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
