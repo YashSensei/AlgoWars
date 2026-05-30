@@ -301,4 +301,13 @@ export const socketEmit = {
   isUserConnected(userId: string): boolean {
     return (userSocketCount.get(userId) ?? 0) > 0;
   },
+
+  // Friend duel events
+  friendLobbyUpdate(userId: string, payload: unknown) {
+    safeEmit(`user:${userId}`, "friend:lobby-update", payload);
+  },
+
+  friendMatchCreated(userId: string, matchId: string) {
+    safeEmit(`user:${userId}`, "friend:match-created", { matchId });
+  },
 };

@@ -5,7 +5,7 @@
  * Falls back to bot opponent after 15s with no real match.
  */
 
-import { eq, sql } from "drizzle-orm";
+import { eq, isNotNull, sql } from "drizzle-orm";
 import { matches, matchPlayers, problems, userStats, users } from "../db/schema";
 import { db } from "../lib/db";
 import { logger } from "../lib/logger";
@@ -56,17 +56,30 @@ function findMatch(player: QueuedPlayer): QueuedPlayer | null {
 // Pick a random problem in bucket; lazy-fetch its statement from Codeforces if not yet cached.
 async function selectProblem(avgRating: number): Promise<string | null> {
   const bucket = getRatingBucket(avgRating);
-  const [row] = await db
+  const rows = await db
     .select({ id: problems.id, statement: problems.statement })
     .from(problems)
     .where(eq(problems.ratingBucket, bucket))
     .orderBy(sql`RANDOM()`)
-    .limit(1);
-  if (!row) return null;
-  if (row.statement) return row.id;
+    .limit(5);
 
-  const fetched = await fetchAndSaveStatement(row.id);
-  return fetched ? row.id : null;
+  for (const row of rows) {
+    if (row.statement) return row.id;
+    const fetched = await fetchAndSaveStatement(row.id);
+    if (fetched) return row.id;
+  }
+
+  return selectFallbackProblem();
+}
+
+async function selectFallbackProblem(): Promise<string | null> {
+  const [row] = await db
+    .select({ id: problems.id })
+    .from(problems)
+    .where(isNotNull(problems.statement))
+    .orderBy(sql`RANDOM()`)
+    .limit(1);
+  return row?.id ?? null;
 }
 
 function buildMatchedPayload(
@@ -290,6 +303,10 @@ function cancelBotTimer(userId: string): void {
     botTimers.delete(userId);
   }
 }
+
+// Exported for reuse by friend duel routes (same match creation logic)
+export { createMatch, selectProblem };
+export type { QueuedPlayer };
 
 // Public API
 export const matchmaking = {

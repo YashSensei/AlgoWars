@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { adminRoutes } from "./admin";
 import { authRoutes } from "./auth";
+import { friendRoutes } from "./friend";
 import { matchRoutes } from "./matches";
 import { submissionRoutes } from "./submissions";
 import { userRoutes } from "./users";
@@ -15,4 +16,5 @@ routes.route("/auth", authRoutes);
 routes.route("/users", userRoutes);
 routes.route("/matches", matchRoutes);
 routes.route("/submissions", submissionRoutes);
+routes.route("/friend", friendRoutes);
 routes.route("/admin", adminRoutes);
