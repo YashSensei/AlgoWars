@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Noto_Sans_JP, JetBrains_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import "./globals.css";
 
@@ -73,6 +74,7 @@ export default function RootLayout({
       >
         <AuthProvider>{children}</AuthProvider>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
