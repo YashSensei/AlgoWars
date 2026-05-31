@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button, GlassPanel, Icon } from "@/components/ui";
 import { useUser } from "@/stores";
@@ -8,7 +8,7 @@ import { friendApi, ApiClientError } from "@/lib/api";
 import type { LobbyResponse } from "@/lib/api/friend";
 import { getSocket } from "@/lib/socket";
 
-type LobbyState = "loading" | "lobby" | "expired" | "error" | "not_found";
+type LobbyState = "loading" | "lobby" | "countdown" | "expired" | "error" | "not_found";
 
 export default function FriendLobbyPage() {
   const params = useParams();
@@ -19,9 +19,11 @@ export default function FriendLobbyPage() {
   const [state, setState] = useState<LobbyState>("loading");
   const [lobby, setLobby] = useState<LobbyResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [joining, setJoining] = useState(false);
-  const [starting, setStarting] = useState(false);
+  const [countdown, setCountdown] = useState(3);
   const [copied, setCopied] = useState(false);
+
+  const joinAttempted = useRef(false);
+  const startAttempted = useRef(false);
 
   const isHost = lobby?.host.id === user?.id;
   const isGuest = lobby?.guest?.id === user?.id;
@@ -51,9 +53,62 @@ export default function FriendLobbyPage() {
     fetchRoom();
   }, [fetchRoom]);
 
-  // Socket listeners for real-time lobby updates
+  // Auto-join: guest opens link → joins immediately
   useEffect(() => {
-    if (state !== "lobby") return;
+    if (state !== "lobby" || !lobby || !user) return;
+    if (isHost || isGuest) return;
+    if (lobby.room.status !== "waiting") return;
+    if (joinAttempted.current) return;
+
+    joinAttempted.current = true;
+    friendApi.joinRoom(code).then((res) => {
+      if (res.redirect) {
+        router.push(res.redirect);
+      } else {
+        fetchRoom();
+      }
+    }).catch((err) => {
+      setError(err instanceof ApiClientError ? err.message : "Failed to join");
+      setState("error");
+    });
+  }, [state, lobby, user, isHost, isGuest, code, fetchRoom]);
+
+  // Trigger countdown when both present (host only)
+  useEffect(() => {
+    if (state !== "lobby" || !lobby?.canStart || !isHost) return;
+    if (startAttempted.current) return;
+    startAttempted.current = true;
+    setState("countdown");
+  }, [state, lobby?.canStart, isHost]);
+
+  // Run the countdown timer and start match at 0
+  useEffect(() => {
+    if (state !== "countdown") return;
+
+    let seconds = 3;
+    setCountdown(seconds);
+
+    const interval = setInterval(() => {
+      seconds--;
+      setCountdown(seconds);
+      if (seconds <= 0) {
+        clearInterval(interval);
+        friendApi.startMatch(code).then(({ matchId }) => {
+          router.push(`/match/${matchId}`);
+        }).catch((err) => {
+          setError(err instanceof ApiClientError ? err.message : "Failed to start match");
+          setState("error");
+          startAttempted.current = false;
+        });
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [state, code, router]);
+
+  // Socket listeners
+  useEffect(() => {
+    if (state !== "lobby" && state !== "countdown") return;
     const socket = getSocket();
 
     const handleLobbyUpdate = (data: LobbyResponse) => {
@@ -73,31 +128,6 @@ export default function FriendLobbyPage() {
       socket.off("friend:match-created", handleMatchCreated);
     };
   }, [state, router]);
-
-  const handleJoin = async () => {
-    setJoining(true);
-    setError(null);
-    try {
-      await friendApi.joinRoom(code);
-      await fetchRoom();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to join");
-    } finally {
-      setJoining(false);
-    }
-  };
-
-  const handleStart = async () => {
-    setStarting(true);
-    setError(null);
-    try {
-      const { matchId } = await friendApi.startMatch(code);
-      router.push(`/match/${matchId}`);
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to start match");
-      setStarting(false);
-    }
-  };
 
   const handleCopy = () => {
     const url = `${window.location.origin}/friend/${code}`;
@@ -134,8 +164,6 @@ export default function FriendLobbyPage() {
 
   if (!lobby) return null;
 
-  const showJoinButton = !isHost && !isGuest && lobby.room.status === "waiting";
-  const showStartButton = isHost && lobby.canStart;
   const showWaiting = isHost && lobby.room.status === "waiting";
 
   return (
@@ -153,9 +181,20 @@ export default function FriendLobbyPage() {
         <PlayerCard label="Host" player={lobby.host} isYou={isHost} ready />
 
         <div className="flex flex-col items-center gap-2">
-          <div className="size-14 rounded-full border-2 border-primary/30 flex items-center justify-center bg-card-dark">
-            <span className="text-xl font-black text-primary">VS</span>
+          <div className={`size-14 rounded-full border-2 flex items-center justify-center bg-card-dark transition-all ${
+            state === "countdown" ? "border-green-400 scale-110" : "border-primary/30"
+          }`}>
+            {state === "countdown" ? (
+              <span className="text-2xl font-black text-green-400">{countdown}</span>
+            ) : (
+              <span className="text-xl font-black text-primary">VS</span>
+            )}
           </div>
+          {state === "countdown" && (
+            <p className="text-xs text-green-400 font-bold uppercase tracking-widest animate-pulse">
+              Match starting...
+            </p>
+          )}
         </div>
 
         {lobby.guest ? (
@@ -181,24 +220,6 @@ export default function FriendLobbyPage() {
           </div>
         )}
 
-        {showJoinButton && (
-          <Button variant="primary" size="lg" onClick={handleJoin} disabled={joining} leftIcon="login">
-            {joining ? "Joining..." : "Join Match"}
-          </Button>
-        )}
-
-        {showStartButton && (
-          <Button
-            variant="primary"
-            size="lg"
-            onClick={handleStart}
-            disabled={starting}
-            leftIcon="play_arrow"
-          >
-            {starting ? "Starting..." : "Start Match"}
-          </Button>
-        )}
-
         {showWaiting && (
           <GlassPanel padding="p-4" className="max-w-sm w-full">
             <p className="text-xs text-text-muted uppercase tracking-widest text-center mb-3">
@@ -215,8 +236,8 @@ export default function FriendLobbyPage() {
           </GlassPanel>
         )}
 
-        {isGuest && lobby.room.status === "ready" && (
-          <p className="text-sm text-text-muted">Waiting for host to start the match...</p>
+        {isGuest && lobby.room.status === "ready" && state !== "countdown" && (
+          <p className="text-sm text-text-muted">Waiting for match to start...</p>
         )}
       </div>
     </div>

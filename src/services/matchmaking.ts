@@ -73,13 +73,27 @@ async function selectProblem(avgRating: number): Promise<string | null> {
 }
 
 async function selectFallbackProblem(): Promise<string | null> {
-  const [row] = await db
+  // First try: any problem with a cached statement (any bucket)
+  const [cached] = await db
     .select({ id: problems.id })
     .from(problems)
     .where(isNotNull(problems.statement))
     .orderBy(sql`RANDOM()`)
     .limit(1);
-  return row?.id ?? null;
+  if (cached) return cached.id;
+
+  // Last resort: try to fetch statements for 5 random problems
+  const unfetched = await db
+    .select({ id: problems.id })
+    .from(problems)
+    .where(isNotNull(problems.url))
+    .orderBy(sql`RANDOM()`)
+    .limit(5);
+  for (const row of unfetched) {
+    const fetched = await fetchAndSaveStatement(row.id);
+    if (fetched) return row.id;
+  }
+  return null;
 }
 
 function buildMatchedPayload(
@@ -305,7 +319,7 @@ function cancelBotTimer(userId: string): void {
 }
 
 // Exported for reuse by friend duel routes (same match creation logic)
-export { createMatch, selectProblem };
+export { createMatch, hasActiveMatch, selectProblem };
 export type { QueuedPlayer };
 
 // Public API

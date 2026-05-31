@@ -28,12 +28,25 @@ export interface LobbyResponse {
   canStart: boolean;
 }
 
+export interface CreateRoomResponse {
+  roomId?: string;
+  inviteCode?: string;
+  redirect?: string;
+  matchId?: string;
+}
+
+export interface JoinRoomResponse {
+  success?: boolean;
+  redirect?: string;
+  matchId?: string;
+}
+
 export const friendApi = {
-  createRoom: () => api.post<{ roomId: string; inviteCode: string }>("/friend/create"),
+  createRoom: () => api.post<CreateRoomResponse>("/friend/create"),
 
   getRoom: (code: string) => api.get<LobbyResponse>(`/friend/${code}`),
 
-  joinRoom: (code: string) => api.post<{ success: boolean }>(`/friend/${code}/join`),
+  joinRoom: (code: string) => api.post<JoinRoomResponse>(`/friend/${code}/join`),
 
   startMatch: (code: string) => api.post<{ matchId: string }>(`/friend/${code}/start`),
 };

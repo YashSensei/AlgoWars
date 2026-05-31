@@ -14,8 +14,12 @@ export default function FriendLandingPage() {
     setCreating(true);
     setError(null);
     try {
-      const { inviteCode } = await friendApi.createRoom();
-      router.push(`/friend/${inviteCode}`);
+      const res = await friendApi.createRoom();
+      if (res.redirect) {
+        router.push(res.redirect);
+        return;
+      }
+      router.push(`/friend/${res.inviteCode}`);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to create room");
       setCreating(false);

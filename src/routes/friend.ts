@@ -12,7 +12,7 @@ import { friendRooms, userStats, users } from "../db/schema";
 import { db } from "../lib/db";
 import { Errors } from "../lib/errors";
 import { authMiddleware } from "../middleware/auth";
-import { createMatch, type QueuedPlayer } from "../services/matchmaking";
+import { createMatch, hasActiveMatch, type QueuedPlayer } from "../services/matchmaking";
 import { socketEmit } from "../socket";
 
 export const friendRoutes = new Hono();
@@ -36,6 +36,9 @@ function generateInviteCode(): string {
  */
 friendRoutes.post("/create", async (c) => {
   const user = c.get("user");
+
+  const activeMatchId = await hasActiveMatch(user.id);
+  if (activeMatchId) return c.json({ redirect: `/match/${activeMatchId}`, matchId: activeMatchId });
 
   // Cancel any previous waiting/ready rooms for this host
   await db
@@ -107,6 +110,9 @@ friendRoutes.post("/:code/join", async (c) => {
   const user = c.get("user");
   const { code } = c.req.param();
 
+  const activeMatchId = await hasActiveMatch(user.id);
+  if (activeMatchId) return c.json({ redirect: `/match/${activeMatchId}`, matchId: activeMatchId });
+
   const room = await findRoomByCode(code);
   if (!room) throw Errors.NotFound("Room");
   if (room.status === "expired" || room.expiresAt < new Date()) {
@@ -118,7 +124,7 @@ friendRoutes.post("/:code/join", async (c) => {
   const existingRoom = await db.query.friendRooms.findFirst({
     where: and(
       or(eq(friendRooms.hostUserId, user.id), eq(friendRooms.guestUserId, user.id)),
-      inArray(friendRooms.status, ["waiting", "ready", "active"]),
+      inArray(friendRooms.status, ["waiting", "ready"]),
       gt(friendRooms.expiresAt, new Date()),
     ),
   });
@@ -192,6 +198,30 @@ async function startFriendMatch(room: {
   guestUserId: string;
   duration: number;
 }): Promise<string> {
+  // Claim the room FIRST — prevents double-start creating orphan matches
+  const claimed = await db
+    .update(friendRooms)
+    .set({ status: "active" })
+    .where(and(eq(friendRooms.id, room.id), eq(friendRooms.status, "ready")))
+    .returning({ id: friendRooms.id });
+
+  if (!claimed.length) throw Errors.Conflict("Room already started");
+
+  try {
+    return await createMatchForRoom(room);
+  } catch (err) {
+    // Revert room to "ready" so host can retry
+    await db.update(friendRooms).set({ status: "ready" }).where(eq(friendRooms.id, room.id));
+    throw err;
+  }
+}
+
+async function createMatchForRoom(room: {
+  id: string;
+  hostUserId: string;
+  guestUserId: string;
+  duration: number;
+}): Promise<string> {
   const [hostStats, guestStats] = await Promise.all([
     db.query.userStats.findFirst({ where: eq(userStats.userId, room.hostUserId) }),
     db.query.userStats.findFirst({ where: eq(userStats.userId, room.guestUserId) }),
@@ -203,15 +233,7 @@ async function startFriendMatch(room: {
   const p2 = toQueuedPlayer(room.guestUserId, guestStats.rating, room.duration);
   const matchId = await createMatch(p1, p2, room.duration);
 
-  // Atomic: only transitions if still "ready" — prevents double-start race
-  const updated = await db
-    .update(friendRooms)
-    .set({ status: "active", matchId })
-    .where(and(eq(friendRooms.id, room.id), eq(friendRooms.status, "ready")))
-    .returning({ id: friendRooms.id });
-
-  if (!updated.length) throw Errors.Conflict("Room already started");
-
+  await db.update(friendRooms).set({ matchId }).where(eq(friendRooms.id, room.id));
   return matchId;
 }
 
