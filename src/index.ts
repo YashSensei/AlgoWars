@@ -1,8 +1,8 @@
 import { createServer } from "node:http";
 import { getRequestListener } from "@hono/node-server";
-import { inArray } from "drizzle-orm";
+import { and, inArray, lt } from "drizzle-orm";
 import { app } from "./app";
-import { matches } from "./db/schema";
+import { friendRooms, matches } from "./db/schema";
 import { db, startDbKeepAlive, verifyDbConnection } from "./lib/db";
 import { env } from "./lib/env";
 import { logger } from "./lib/logger";
@@ -51,6 +51,21 @@ const cleanupInterval = setInterval(() => {
   matchmaking.cleanupStale();
 }, QUEUE_CLEANUP_INTERVAL_MS);
 
+// Expire stale friend duel rooms (every 60 seconds)
+const ROOM_CLEANUP_INTERVAL_MS = 60000;
+const roomCleanupInterval = setInterval(async () => {
+  const expired = await db
+    .update(friendRooms)
+    .set({ status: "expired" })
+    .where(
+      and(inArray(friendRooms.status, ["waiting", "ready"]), lt(friendRooms.expiresAt, new Date())),
+    )
+    .returning({ id: friendRooms.id });
+  if (expired.length > 0) {
+    logger.info("Server", `Expired ${expired.length} friend room(s)`);
+  }
+}, ROOM_CLEANUP_INTERVAL_MS);
+
 // Supabase DB keep-alive pinger (every 5 days)
 const dbPingInterval = startDbKeepAlive();
 
@@ -84,6 +99,7 @@ function gracefulShutdown(signal: string) {
 
   // Clear intervals
   clearInterval(cleanupInterval);
+  clearInterval(roomCleanupInterval);
   clearInterval(dbPingInterval);
   if (keepAliveInterval) clearInterval(keepAliveInterval);
 

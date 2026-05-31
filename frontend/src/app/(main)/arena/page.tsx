@@ -37,6 +37,13 @@ const GAME_MODES: GameMode[] = [
     live: true,
   },
   {
+    title: "Private Duel",
+    description: "Challenge a friend",
+    icon: "swords",
+    route: "/friend",
+    live: true,
+  },
+  {
     title: "Daily Challenge",
     description: "New problem every day",
     icon: "calendar_today",

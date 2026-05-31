@@ -36,6 +36,13 @@ export const verdictEnum = pgEnum("verdict", [
   "COMPILE_ERROR",
   "JUDGE_TIMEOUT",
 ]);
+export const friendRoomStatusEnum = pgEnum("friend_room_status", [
+  "waiting",
+  "ready",
+  "active",
+  "completed",
+  "expired",
+]);
 
 // ============================================
 // USERS
@@ -181,6 +188,34 @@ export const submissions = pgTable(
 ).enableRLS();
 
 // ============================================
+// FRIEND ROOMS (Private Duel)
+// ============================================
+
+export const friendRooms = pgTable(
+  "friend_rooms",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    inviteCode: varchar("invite_code", { length: 8 }).notNull().unique(),
+    hostUserId: text("host_user_id")
+      .notNull()
+      .references(() => users.id),
+    guestUserId: text("guest_user_id").references(() => users.id),
+    matchId: text("match_id").references(() => matches.id),
+    status: friendRoomStatusEnum("status").default("waiting").notNull(),
+    duration: integer("duration").default(900).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("invite_code_idx").on(t.inviteCode),
+    index("host_user_idx").on(t.hostUserId),
+    index("room_status_idx").on(t.status),
+  ],
+).enableRLS();
+
+// ============================================
 // RELATIONS
 // ============================================
 
@@ -214,6 +249,12 @@ export const submissionsRelations = relations(submissions, ({ one }) => ({
   user: one(users, { fields: [submissions.userId], references: [users.id] }),
 }));
 
+export const friendRoomsRelations = relations(friendRooms, ({ one }) => ({
+  host: one(users, { fields: [friendRooms.hostUserId], references: [users.id] }),
+  guest: one(users, { fields: [friendRooms.guestUserId], references: [users.id] }),
+  match: one(matches, { fields: [friendRooms.matchId], references: [matches.id] }),
+}));
+
 // ============================================
 // TYPE EXPORTS
 // ============================================
@@ -225,3 +266,4 @@ export type Problem = typeof problems.$inferSelect;
 export type Match = typeof matches.$inferSelect;
 export type MatchPlayer = typeof matchPlayers.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
+export type FriendRoom = typeof friendRooms.$inferSelect;

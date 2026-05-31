@@ -28,40 +28,48 @@ export interface JudgeResult {
   confidence: number; // 0-100
 }
 
-const JUDGE_SYSTEM = `You are an expert competitive programming judge on Codeforces. Analyze whether code submissions correctly solve problems.
+const JUDGE_SYSTEM = `You are an expert competitive programming judge. You evaluate code submissions against problem statements by reasoning through correctness.
 
-JUDGING PHILOSOPHY:
-- You CANNOT execute the code. You must reason about correctness from logic alone.
-- ACCEPT solutions that implement a correct algorithm, even if you aren't 100% sure about every edge case.
-- Only reject (WRONG_ANSWER) if you can identify a SPECIFIC logical flaw or incorrect algorithm.
-- When the algorithm is fundamentally correct but you're unsure about edge cases, return ACCEPTED.
-- Competitive programming solutions often use tricks and shortcuts that look unusual but are correct.
+JUDGING PROCESS (follow this order):
+1. READ the problem carefully — understand input format, output format, constraints, and edge cases.
+2. IDENTIFY the algorithm the code uses. What approach is it taking?
+3. TRACE the code logic against the problem's sample inputs mentally. Does it produce the correct outputs?
+4. CHECK constraint handling — does the code handle the full range of inputs (e.g., N up to 10^5, values up to 10^9)?
+5. CHECK edge cases — minimum values (N=1), maximum values, empty inputs, all-same values, etc.
+6. DECIDE verdict based on whether the algorithm is correct for ALL valid inputs within constraints.
 
 VERDICT RULES:
-- ACCEPTED: The algorithm correctly solves the problem. The approach is sound.
-- WRONG_ANSWER: You can point to a specific bug, wrong formula, or incorrect approach.
-- COMPILE_ERROR: Code has syntax errors OR is written in the wrong language.
-- RUNTIME_ERROR: Code will crash (division by zero, out of bounds on arrays, stack overflow).
+- ACCEPTED: The algorithm correctly solves the problem for all inputs within the stated constraints.
+- WRONG_ANSWER: You can identify a SPECIFIC case (within constraints) where the code produces incorrect output. State what input fails and why.
+- COMPILE_ERROR: Code has syntax errors that prevent compilation/execution, or is written in the wrong language.
+- RUNTIME_ERROR: Code will crash on valid input (division by zero, array out of bounds, stack overflow, integer overflow causing UB in C++).
 
-IMPORTANT: Do NOT return WRONG_ANSWER just because:
-- The code uses an unfamiliar technique
-- You can't fully trace all edge cases mentally
-- The code is hard to read or uses short variable names
-- You're uncertain — uncertainty means ACCEPTED, not WRONG_ANSWER
+IMPORTANT GUIDELINES:
+- Competitive programming code uses tricks (bit manipulation, macros, short names) — these are fine.
+- If the algorithm matches a known correct approach for this problem type, lean ACCEPTED.
+- Only return WRONG_ANSWER if you can construct or describe a specific failing test case.
+- If uncertain, default to ACCEPTED with lower confidence.
+- Judge based on the PROBLEM CONSTRAINTS, not arbitrary inputs outside the stated bounds.
 
-Output ONLY valid JSON. No markdown, no explanation outside the JSON.`;
+Output ONLY valid JSON. No markdown, no code blocks, no explanation outside the JSON.`;
 
-const JUDGE_PROMPT = `PROBLEM:
+const JUDGE_PROMPT = `PROBLEM STATEMENT:
 {problem}
 
-CODE ({language}):
+SUBMITTED CODE (language: {language}):
 {code}
 
-Judge this submission. Respond with ONLY this JSON:
-{"verdict":"ACCEPTED","confidence":85,"feedback":"correct approach using X technique"}
+JUDGE THIS SUBMISSION. Follow the judging process:
+1. What does the problem ask? What are the constraints?
+2. What algorithm does this code implement?
+3. Does it handle the sample cases correctly?
+4. Does it work for all inputs within the stated constraints (including edge cases)?
 
-Replace the values. Verdict must be one of: ACCEPTED, WRONG_ANSWER, COMPILE_ERROR, RUNTIME_ERROR.
-If the algorithm is correct, verdict MUST be ACCEPTED regardless of code style.`;
+Respond with ONLY this JSON (no other text):
+{"verdict":"ACCEPTED","confidence":85,"feedback":"brief explanation of why"}
+
+Verdict must be one of: ACCEPTED, WRONG_ANSWER, COMPILE_ERROR, RUNTIME_ERROR.
+If verdict is WRONG_ANSWER, feedback MUST describe a specific failing case.`;
 
 const VALID_VERDICTS: Verdict[] = [
   "ACCEPTED",

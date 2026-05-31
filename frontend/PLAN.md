@@ -89,7 +89,7 @@
 - [x] Victory/Defeat display
 - [x] Rating change animation
 - [x] Match statistics
-- [x] Play again / Return to arena buttons
+- [x] Play Next / Return to arena buttons
 
 ### Phase 8: Leaderboard ✅
 - [x] "Hall of Shoguns" header
