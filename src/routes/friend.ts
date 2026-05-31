@@ -74,7 +74,7 @@ friendRoutes.get("/:code", async (c) => {
 
   const host = await db.query.users.findFirst({
     where: eq(users.id, room.hostUserId),
-    columns: { id: true, username: true },
+    columns: { id: true, username: true, avatar: true },
     with: { stats: { columns: statsColumns } },
   });
 
@@ -82,7 +82,7 @@ friendRoutes.get("/:code", async (c) => {
   if (room.guestUserId) {
     guest = await db.query.users.findFirst({
       where: eq(users.id, room.guestUserId),
-      columns: { id: true, username: true },
+      columns: { id: true, username: true, avatar: true },
       with: { stats: { columns: statsColumns } },
     });
   }
@@ -240,6 +240,7 @@ async function createMatchForRoom(room: {
 type PlayerRow = {
   id?: string;
   username?: string | null;
+  avatar?: string | null;
   stats?: { rating: number; wins: number; losses: number; winStreak: number } | null;
 };
 
@@ -247,6 +248,7 @@ function formatPlayer(player: PlayerRow | undefined | null) {
   return {
     id: player?.id ?? "",
     username: player?.username ?? null,
+    avatar: player?.avatar ?? null,
     rating: player?.stats?.rating ?? 1000,
     wins: player?.stats?.wins ?? 0,
     losses: player?.stats?.losses ?? 0,
@@ -279,6 +281,7 @@ function buildLobbyPayload(
 }
 
 const STATS_COLUMNS = { rating: true, wins: true, losses: true, winStreak: true } as const;
+const USER_COLUMNS = { id: true, username: true, avatar: true } as const;
 
 async function emitLobbyUpdate(roomId: string): Promise<void> {
   const room = await db.query.friendRooms.findFirst({
@@ -288,7 +291,7 @@ async function emitLobbyUpdate(roomId: string): Promise<void> {
 
   const host = await db.query.users.findFirst({
     where: eq(users.id, room.hostUserId),
-    columns: { id: true, username: true },
+    columns: USER_COLUMNS,
     with: { stats: { columns: STATS_COLUMNS } },
   });
 
@@ -296,7 +299,7 @@ async function emitLobbyUpdate(roomId: string): Promise<void> {
   if (room.guestUserId) {
     guest = await db.query.users.findFirst({
       where: eq(users.id, room.guestUserId),
-      columns: { id: true, username: true },
+      columns: USER_COLUMNS,
       with: { stats: { columns: STATS_COLUMNS } },
     });
   }

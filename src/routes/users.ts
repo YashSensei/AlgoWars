@@ -25,7 +25,7 @@ userRoutes.get("/me", authMiddleware, async (c) => {
 
   const user = await db.query.users.findFirst({
     where: eq(users.id, id),
-    columns: { id: true, username: true, email: true, createdAt: true },
+    columns: { id: true, username: true, email: true, avatar: true, createdAt: true },
     with: { stats: true },
   });
 
@@ -63,7 +63,48 @@ userRoutes.patch("/me/username", authMiddleware, async (c) => {
 
   const updated = await db.query.users.findFirst({
     where: eq(users.id, id),
-    columns: { id: true, username: true, email: true, createdAt: true },
+    columns: { id: true, username: true, email: true, avatar: true, createdAt: true },
+    with: { stats: true },
+  });
+
+  return c.json(updated);
+});
+
+const ALLOWED_AVATARS = [
+  "bug_hunter.png",
+  "data_titan.png",
+  "quantom_hacker.png",
+  "runtine_rouge.png",
+  "stack_samurai.png",
+  "syntax_sage.png",
+] as const;
+
+const avatarSchema = z.object({
+  avatar: z.enum(ALLOWED_AVATARS),
+});
+
+/**
+ * PUT /users/me/avatar
+ * Set or update user's avatar
+ */
+userRoutes.put("/me/avatar", authMiddleware, async (c) => {
+  const { id } = c.get("user");
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    throw Errors.BadRequest("Invalid JSON body");
+  }
+
+  const parsed = avatarSchema.safeParse(body);
+  if (!parsed.success) throw Errors.BadRequest("Invalid avatar selection");
+
+  await db.update(users).set({ avatar: parsed.data.avatar }).where(eq(users.id, id));
+
+  const updated = await db.query.users.findFirst({
+    where: eq(users.id, id),
+    columns: { id: true, username: true, email: true, avatar: true, createdAt: true },
     with: { stats: true },
   });
 
@@ -84,7 +125,7 @@ userRoutes.get("/leaderboard", async (c) => {
     offset,
     with: {
       user: {
-        columns: { id: true, username: true },
+        columns: { id: true, username: true, avatar: true },
       },
     },
   });
@@ -94,6 +135,7 @@ userRoutes.get("/leaderboard", async (c) => {
     rank: offset + index + 1,
     userId: entry.user.id,
     username: entry.user.username,
+    avatar: entry.user.avatar,
     rating: entry.rating,
     wins: entry.wins,
     losses: entry.losses,
@@ -203,7 +245,7 @@ userRoutes.get("/:username", async (c) => {
 
   const user = await db.query.users.findFirst({
     where: eq(users.username, username),
-    columns: { id: true, username: true, createdAt: true },
+    columns: { id: true, username: true, avatar: true, createdAt: true },
     with: {
       stats: {
         columns: {

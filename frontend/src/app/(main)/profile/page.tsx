@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { GlassPanel, Button, Icon } from "@/components/ui";
+import { getAvatarUrl } from "@/lib/avatars";
 import { useUser } from "@/stores";
 import { calculateWinRate, formatRatingChange } from "@/lib/utils";
 import { getRankFromXP, getXPProgress } from "@/lib/xp";
@@ -75,8 +77,12 @@ export default function ProfilePage() {
         <GlassPanel showCornerAccents padding="p-8">
           <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
             {/* Avatar */}
-            <div className="size-24 md:size-32 rounded-xl bg-primary/10 border-2 border-primary/30 flex items-center justify-center">
-              <Icon name="person" size={64} className="text-primary" />
+            <div className="size-24 md:size-32 rounded-xl bg-primary/10 border-2 border-primary/30 flex items-center justify-center overflow-hidden">
+              {user?.avatar ? (
+                <Image src={getAvatarUrl(user.avatar)} alt="Avatar" width={128} height={128} className="w-full h-full object-cover" />
+              ) : (
+                <Icon name="person" size={64} className="text-primary" />
+              )}
             </div>
 
             {/* User Info */}

@@ -56,6 +56,7 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   role: userRoleEnum("role").default("USER").notNull(),
   isBot: boolean("is_bot").default(false).notNull(),
+  avatar: varchar("avatar", { length: 64 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }).enableRLS();
