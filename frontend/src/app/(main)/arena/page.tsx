@@ -86,11 +86,12 @@ const NAV_ITEMS = [
 export default function ArenaPage() {
   const user = useUser();
   const [showAvatarOverlay, setShowAvatarOverlay] = useState(false);
-  const [avatarDismissed, setAvatarDismissed] = useState(false);
 
   useEffect(() => {
-    if (user && !user.avatar && !avatarDismissed) setShowAvatarOverlay(true);
-  }, [user?.avatar, avatarDismissed]);
+    if (!user || user.avatar) return;
+    const dismissed = localStorage.getItem("avatar_dismissed");
+    if (!dismissed) setShowAvatarOverlay(true);
+  }, [user?.avatar]);
 
   const stats = user?.stats;
   const totalMatches = (stats?.wins ?? 0) + (stats?.losses ?? 0) + (stats?.draws ?? 0);
@@ -273,7 +274,7 @@ export default function ArenaPage() {
       </div>
 
       {showAvatarOverlay && (
-        <AvatarOverlay onComplete={() => { setShowAvatarOverlay(false); setAvatarDismissed(true); }} />
+        <AvatarOverlay onComplete={() => { setShowAvatarOverlay(false); localStorage.setItem("avatar_dismissed", "1"); }} />
       )}
     </div>
   );

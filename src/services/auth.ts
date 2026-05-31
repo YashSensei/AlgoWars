@@ -44,7 +44,7 @@ async function createDbProfile(userId: string, email: string, username?: string)
 function fetchUserProfile(userId: string) {
   return db.query.users.findFirst({
     where: eq(users.id, userId),
-    columns: { id: true, username: true, email: true, createdAt: true, role: true },
+    columns: { id: true, username: true, email: true, avatar: true, createdAt: true, role: true },
     with: { stats: true },
   });
 }

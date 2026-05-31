@@ -152,8 +152,15 @@ export default function SignupPage() {
 
         {/* Error */}
         {error && (
-          <div className="mb-6 p-3 bg-red-500/10 border border-red-500/30 rounded text-red-400 text-xs">
-            {error}
+          <div className="mb-6 p-3 bg-red-500/10 border border-red-500/30 rounded text-xs">
+            <p className="text-red-400">{error}</p>
+            <button
+              type="button"
+              onClick={() => loginWithOAuth("google")}
+              className="mt-2 text-primary hover:text-white transition-colors font-bold uppercase tracking-wide"
+            >
+              Try signing up with Google instead →
+            </button>
           </div>
         )}
 
