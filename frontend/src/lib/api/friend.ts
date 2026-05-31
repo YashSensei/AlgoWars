@@ -15,6 +15,7 @@ export interface FriendRoom {
 export interface LobbyPlayer {
   id: string;
   username: string | null;
+  avatar: string | null;
   rating: number;
   wins: number;
   losses: number;

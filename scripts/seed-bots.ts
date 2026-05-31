@@ -8,6 +8,15 @@ import { eq } from "drizzle-orm";
 import { users, userStats } from "../src/db/schema";
 import { db } from "../src/lib/db";
 
+const AVATARS = [
+  "bug_hunter.png",
+  "data_titan.png",
+  "quantom_hacker.png",
+  "runtine_rouge.png",
+  "stack_samurai.png",
+  "syntax_sage.png",
+];
+
 const BOTS = [
   { username: "CodeNinja", rating: 1050 },
   { username: "AlgoPhantom", rating: 980 },
@@ -35,9 +44,10 @@ async function seedBots() {
       continue;
     }
 
+    const avatar = AVATARS[BOTS.indexOf(bot) % AVATARS.length];
     const [user] = await db
       .insert(users)
-      .values({ username: bot.username, email, isBot: true })
+      .values({ username: bot.username, email, isBot: true, avatar })
       .returning({ id: users.id });
 
     if (user) {

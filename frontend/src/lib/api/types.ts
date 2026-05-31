@@ -21,6 +21,7 @@ export interface User {
   id: string;
   username: string | null; // null for OAuth users who haven't chosen one yet
   email: string;
+  avatar: string | null;
   createdAt: string;
   stats: UserStats | null;
 }

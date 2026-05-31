@@ -1,9 +1,13 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { GlassPanel, Icon } from "@/components/ui";
+import { AvatarOverlay, AvatarCard } from "@/components/avatar";
 import { useUser } from "@/stores";
 import { calculateWinRate } from "@/lib/utils";
+import { getAvatarUrl } from "@/lib/avatars";
 import { getRankFromXP, getXPProgress } from "@/lib/xp";
 
 interface GameMode {
@@ -81,6 +85,13 @@ const NAV_ITEMS = [
 
 export default function ArenaPage() {
   const user = useUser();
+  const [showAvatarOverlay, setShowAvatarOverlay] = useState(false);
+  const [avatarDismissed, setAvatarDismissed] = useState(false);
+
+  useEffect(() => {
+    if (user && !user.avatar && !avatarDismissed) setShowAvatarOverlay(true);
+  }, [user?.avatar, avatarDismissed]);
+
   const stats = user?.stats;
   const totalMatches = (stats?.wins ?? 0) + (stats?.losses ?? 0) + (stats?.draws ?? 0);
   const winRate = calculateWinRate(stats?.wins ?? 0, totalMatches);
@@ -95,8 +106,18 @@ export default function ArenaPage() {
         {/* Left Sidebar — Player Stats */}
         <aside className="hidden lg:flex flex-col gap-3">
           <GlassPanel showCornerAccents padding="p-6" className="text-center">
-            <div className="size-20 mx-auto rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center mb-3">
-              <Icon name="person" size={40} className="text-primary" />
+            <div className="size-20 mx-auto rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center mb-3 overflow-hidden">
+              {user?.avatar ? (
+                <Image
+                  src={getAvatarUrl(user.avatar)}
+                  alt="Avatar"
+                  width={80}
+                  height={80}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Icon name="person" size={40} className="text-primary" />
+              )}
             </div>
             <h2 className="text-2xl font-black text-white uppercase tracking-tight">
               {user?.username ?? "Warrior"}
@@ -181,6 +202,8 @@ export default function ArenaPage() {
             </nav>
           </GlassPanel>
 
+          <AvatarCard onChooseClick={() => setShowAvatarOverlay(true)} />
+
           <GlassPanel showCornerAccents padding="p-4">
             <div className="flex flex-col gap-3">
               <QuickStat label="Wins" value={String(stats?.wins ?? 0)} />
@@ -248,6 +271,10 @@ export default function ArenaPage() {
           </div>
         </GlassPanel>
       </div>
+
+      {showAvatarOverlay && (
+        <AvatarOverlay onComplete={() => { setShowAvatarOverlay(false); setAvatarDismissed(true); }} />
+      )}
     </div>
   );
 }

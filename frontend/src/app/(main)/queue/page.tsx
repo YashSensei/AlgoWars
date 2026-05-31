@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button, GlassPanel, Icon } from "@/components/ui";
 import { useUser } from "@/stores";
 import { formatTime } from "@/lib/utils";
+import { getAvatarUrl } from "@/lib/avatars";
 import { matchesApi, ApiClientError } from "@/lib/api";
 import { getSocket, disconnectSocket } from "@/lib/socket";
 import type { QueueMatchedEvent, MatchCountdownEvent } from "@/lib/api/types";
@@ -248,8 +250,12 @@ export default function QueuePage() {
             <GlassPanel showCornerAccents padding="p-6" className="w-full max-w-sm">
               <div className="flex flex-col items-center gap-4">
                 {/* Avatar */}
-                <div className="size-24 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center">
-                  <Icon name="person" size={48} className="text-primary" />
+                <div className="size-24 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center overflow-hidden">
+                  {user?.avatar ? (
+                    <Image src={getAvatarUrl(user.avatar)} alt="You" width={96} height={96} className="w-full h-full object-cover" />
+                  ) : (
+                    <Icon name="person" size={48} className="text-primary" />
+                  )}
                 </div>
 
                 {/* Name & Rating */}

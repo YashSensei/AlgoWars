@@ -36,4 +36,9 @@ export const usersApi = {
    * Set username (for OAuth users who don't have one yet)
    */
   setUsername: (username: string) => api.patch<User>("/users/me/username", { username }),
+
+  /**
+   * Set or update user's avatar
+   */
+  setAvatar: (avatar: string) => api.put<User>("/users/me/avatar", { avatar }),
 };
